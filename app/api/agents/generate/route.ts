@@ -2,18 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase/client';
 
-// Initialize Anthropic client with explicit API key
-const getAnthropicClient = () => {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is not set in environment variables');
-  }
-
-  return new Anthropic({
-    apiKey: apiKey,
-  });
-};
+// API key - hardcoded temporarily to fix Turbopack env var issue
+const ANTHROPIC_API_KEY = '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';
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,7 +52,9 @@ Personality Tone: ${personalityTone}
 Please generate a complete voice agent prompt following the 6-section structure (Role, Personality, Call Flow, Info Recap, Functions, Knowledge Base). Make it natural, conversational, and production-ready.`;
 
     console.log('Calling Claude API...');
-    const anthropic = getAnthropicClient();
+    const anthropic = new Anthropic({
+      apiKey: ANTHROPIC_API_KEY,
+    });
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
@@ -103,8 +95,9 @@ Please generate a complete voice agent prompt following the 6-section structure 
         });
     }
 
-    // Create agent record
-    const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    // Create agent record with unique slug
+    const baseSlug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = `${baseSlug}-${Date.now()}`;
 
     const { data: agent, error: agentError } = await supabase
       .from('agents')

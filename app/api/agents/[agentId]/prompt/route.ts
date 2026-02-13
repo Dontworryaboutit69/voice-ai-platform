@@ -9,16 +9,10 @@ export async function GET(
     const { agentId } = await params;
     const supabase = createServiceClient();
 
-    // Get agent with current prompt
+    // Get agent
     const { data: agent, error: agentError } = await supabase
       .from('agents')
-      .select(`
-        id,
-        name,
-        business_name,
-        business_type,
-        current_prompt_id
-      `)
+      .select('*')
       .eq('id', agentId)
       .single();
 
@@ -38,20 +32,19 @@ export async function GET(
 
     if (promptError || !promptVersion) {
       return NextResponse.json(
-        { success: false, error: 'Prompt not found' },
+        { success: false, error: 'Prompt version not found' },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      data: {
-        agent,
-        prompt: promptVersion
-      }
+      agent,
+      promptVersion
     });
+
   } catch (error) {
-    console.error('Error fetching prompt:', error);
+    console.error('Error fetching agent prompt:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

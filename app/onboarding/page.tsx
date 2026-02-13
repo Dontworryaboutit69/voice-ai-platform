@@ -31,8 +31,8 @@ export default function OnboardingPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Redirect to the agent prompt page
-        router.push(`/agents/${data.agentId}/prompt`);
+        // Redirect to generating page (agent will be created in background)
+        router.push(`/agents/${data.agentId}/generating`);
       } else {
         alert('Failed to generate prompt: ' + data.error);
       }
