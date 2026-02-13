@@ -2168,7 +2168,7 @@ export default function AgentDashboard() {
           step={currentTourStep}
           totalSteps={tourSteps.length}
           position={currentStep.position}
-          targetRef={currentStep.ref}
+          targetRef={currentStep.ref as any}
           onNext={nextTourStep}
           onPrev={prevTourStep}
           onClose={closeTour}
