@@ -114,7 +114,7 @@ async function updatePromptWithIntegration(
 
   if (!agent || !agent.current_prompt) return;
 
-  const currentPrompt = agent.current_prompt;
+  const currentPrompt = Array.isArray(agent.current_prompt) ? agent.current_prompt[0] : agent.current_prompt;
   let integrationInstructions = '';
 
   // Generate integration-specific instructions
