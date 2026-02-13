@@ -178,11 +178,11 @@ export default function AgentDashboard() {
     try {
       const { data, error } = await supabase
         .from('agents')
-        .select('id, business_name, business_type, status, retell_phone_number')
+        .select('id, name, business_name, business_type, status, retell_phone_number')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        setAllAgents(data);
+        setAllAgents(data as any);
       }
     } catch (error) {
       console.error('Error loading all agents:', error);
