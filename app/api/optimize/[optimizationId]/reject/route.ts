@@ -5,10 +5,10 @@ import { createServiceClient } from '@/lib/supabase/client';
 // Rejects optimization proposal
 export async function POST(
   request: NextRequest,
-  { params }: { params: { optimizationId: string } }
+  { params }: { params: Promise<{ optimizationId: string }> }
 ) {
   try {
-    const { optimizationId } = params;
+    const { optimizationId } = await params;
     const body = await request.json();
     const { feedback } = body;
 

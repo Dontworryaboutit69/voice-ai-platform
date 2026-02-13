@@ -5,10 +5,10 @@ import { createServiceClient } from '@/lib/supabase/client';
 // Get optimization details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { optimizationId: string } }
+  { params }: { params: Promise<{ optimizationId: string }> }
 ) {
   try {
-    const { optimizationId } = params;
+    const { optimizationId } = await params;
 
     const supabase = createServiceClient();
 
@@ -49,10 +49,10 @@ export async function GET(
 // Update optimization with custom feedback
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { optimizationId: string } }
+  { params }: { params: Promise<{ optimizationId: string }> }
 ) {
   try {
-    const { optimizationId } = params;
+    const { optimizationId } = await params;
     const body = await request.json();
     const { customFeedback, customPromptChanges } = body;
 

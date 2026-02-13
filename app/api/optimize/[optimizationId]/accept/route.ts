@@ -5,10 +5,10 @@ import { createServiceClient } from '@/lib/supabase/client';
 // Accepts optimization and starts A/B test
 export async function POST(
   request: NextRequest,
-  { params }: { params: { optimizationId: string } }
+  { params }: { params: Promise<{ optimizationId: string }> }
 ) {
   try {
-    const { optimizationId } = params;
+    const { optimizationId } = await params;
 
     const supabase = createServiceClient();
 

@@ -5,10 +5,10 @@ import { createServiceClient } from '@/lib/supabase/client';
 // Evaluates A/B test results and promotes winner
 export async function POST(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
-    const { testId } = params;
+    const { testId } = await params;
 
     const supabase = createServiceClient();
 
