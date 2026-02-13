@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
 
     // Fetch calls from Retell for this agent
     const callsList = await retell.call.list({
-      agent_id: agent.retell_agent_id,
+      filter_agent_id: agent.retell_agent_id,
       limit: 100, // Fetch last 100 calls
       sort_order: 'descending'
-    });
+    } as any);
 
     let syncedCount = 0;
     let updatedCount = 0;
