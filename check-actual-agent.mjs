@@ -1,0 +1,16 @@
+import Retell from 'retell-sdk';
+
+const retell = new Retell({
+  apiKey: 'key_85da79d1d9da73aee899af323f23'
+});
+
+try {
+  const agent = await retell.agent.retrieve('agent_562033eb10ac620d3ea30aa07f');
+  
+  console.log('=== Agent Being Used for Calls ===');
+  console.log('Agent ID:', agent.agent_id);
+  console.log('Agent Name:', agent.agent_name);
+  console.log('Webhook URL:', agent.webhook_url || '❌ NOT SET');
+} catch (error) {
+  console.error('Error:', error.message);
+}

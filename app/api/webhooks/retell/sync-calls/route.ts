@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     // Get agent's Retell agent ID
     const { data: agent, error: agentError } = await supabase
       .from('agents')
-      .select('retell_agent_id, id, user_id')
+      .select('retell_agent_id, id')
       .eq('id', agentId)
       .single();
 
@@ -61,7 +61,6 @@ export async function POST(request: NextRequest) {
       const callData = {
         retell_call_id: call.call_id,
         agent_id: agentId,
-        user_id: agent.user_id,
         from_number: call.from_number || null,
         to_number: call.to_number || null,
         retell_agent_id: call.agent_id || null,
@@ -76,8 +75,7 @@ export async function POST(request: NextRequest) {
         disconnection_reason: call.disconnection_reason || null,
         call_analysis: call.call_analysis || null,
         call_summary: call.call_analysis?.call_summary || null,
-        sentiment: call.call_analysis?.user_sentiment || null,
-        metadata: call.metadata || {}
+        sentiment: call.call_analysis?.user_sentiment || null
       };
 
       if (existingCall) {

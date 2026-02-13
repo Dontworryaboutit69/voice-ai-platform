@@ -26,26 +26,24 @@ async function handleCallStarted(
   const supabase = createServiceClient();
 
   const agentId = metadata.agent_id as string;
-  const userId = metadata.user_id as string;
 
   console.log(`[call_started] Agent ID: ${agentId}, Call ID: ${callData.call_id}`);
 
-  const { error } = await supabase.from("calls").insert({
+  const { data, error} = await supabase.from("calls").insert({
     retell_call_id: callData.call_id as string,
     agent_id: agentId,
-    user_id: userId,
     from_number: (callData.from_number as string) ?? null,
     to_number: (callData.to_number as string) ?? null,
-    retell_agent_id: (callData.agent_id as string) ?? null,
     started_at: (callData.start_timestamp as string) ?? new Date().toISOString(),
     call_status: "in_progress",
-    metadata: metadata,
   });
 
   if (error) {
-    console.error("[call_started] Failed to insert call record:", error.message, error);
+    console.error("[call_started] Failed to insert call record:", error);
+    console.error("[call_started] Error details:", JSON.stringify(error, null, 2));
   } else {
     console.log(`[call_started] Successfully created call record for ${callData.call_id}`);
+    console.log("[call_started] Inserted data:", data);
   }
 }
 
@@ -85,11 +83,8 @@ async function handleCallEnded(
       transcript,
       transcript_object: transcriptObject,
       recording_url: (callData.recording_url as string) ?? null,
-      public_log_url: (callData.public_log_url as string) ?? null,
       ended_at: (callData.end_timestamp as string) ?? new Date().toISOString(),
       duration_ms: durationMs,
-      disconnection_reason:
-        (callData.disconnection_reason as string) ?? null,
       call_status: "completed",
     })
     .eq("retell_call_id", retellCallId)
@@ -139,8 +134,6 @@ async function handleCallAnalyzed(
     .from("calls")
     .update({
       call_analysis: analysis ?? null,
-      call_summary: (analysis?.call_summary as string) ?? null,
-      sentiment: (analysis?.user_sentiment as string) ?? null,
     })
     .eq("retell_call_id", retellCallId);
 
