@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase/client';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Initialize Anthropic client with explicit API key
+const getAnthropicClient = () => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not set in environment variables');
+  }
+
+  return new Anthropic({
+    apiKey: apiKey,
+  });
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +62,7 @@ Personality Tone: ${personalityTone}
 Please generate a complete voice agent prompt following the 6-section structure (Role, Personality, Call Flow, Info Recap, Functions, Knowledge Base). Make it natural, conversational, and production-ready.`;
 
     console.log('Calling Claude API...');
+    const anthropic = getAnthropicClient();
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,

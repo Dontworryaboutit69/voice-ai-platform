@@ -74,7 +74,7 @@ export default function OnboardingPage() {
               required
               value={formData.businessName}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
               placeholder="Acme Roofing"
             />
           </div>
@@ -90,7 +90,7 @@ export default function OnboardingPage() {
               required
               value={formData.businessType}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
             >
               <option value="">Select a type...</option>
               <option value="restaurant">Restaurant</option>
@@ -117,7 +117,7 @@ export default function OnboardingPage() {
               rows={4}
               value={formData.description}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
               placeholder="We provide residential and commercial roofing services including repairs, replacements, and inspections..."
             />
           </div>
@@ -133,7 +133,7 @@ export default function OnboardingPage() {
               name="website"
               value={formData.website}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
               placeholder="https://acmeroofing.com"
             />
           </div>
@@ -150,7 +150,7 @@ export default function OnboardingPage() {
               required
               value={formData.location}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
               placeholder="San Francisco, CA"
             />
           </div>
@@ -167,7 +167,7 @@ export default function OnboardingPage() {
               rows={3}
               value={formData.callObjective}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
               placeholder="Qualify leads, collect their contact info and problem details, and schedule a free inspection..."
             />
           </div>
@@ -182,7 +182,7 @@ export default function OnboardingPage() {
               name="personalityTone"
               value={formData.personalityTone}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
             >
               <option value="friendly">Friendly & Casual</option>
               <option value="professional">Professional</option>
