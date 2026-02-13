@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
 
     // Process each call
-    for (const call of callsList) {
+    for (const callRaw of callsList) {
+      const call = callRaw as any; // Cast to any to work around Retell SDK type issues
+
       // Check if call already exists in database
       const { data: existingCall } = await supabase
         .from('calls')
