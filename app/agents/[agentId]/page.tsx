@@ -2960,18 +2960,6 @@ export default function AgentDashboard() {
                 </div>
               )}
 
-              {/* Transcript */}
-              {selectedCall.transcript && (
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span>📝</span> Transcript
-                  </h4>
-                  <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
-                    <p className="text-gray-700 whitespace-pre-wrap">{selectedCall.transcript}</p>
-                  </div>
-                </div>
-              )}
-
               {/* Interactive Transcript with Training Feedback */}
               {selectedCall.transcript_object && Array.isArray(selectedCall.transcript_object) && (
                 <div className="bg-gray-50 rounded-xl p-6">
@@ -3023,18 +3011,6 @@ export default function AgentDashboard() {
                       </p>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Call Analysis */}
-              {selectedCall.call_analysis && (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6">
-                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span>📊</span> Call Analysis
-                  </h4>
-                  <pre className="bg-white rounded-lg p-4 text-sm text-gray-700 overflow-x-auto">
-                    {JSON.stringify(selectedCall.call_analysis, null, 2)}
-                  </pre>
                 </div>
               )}
 
