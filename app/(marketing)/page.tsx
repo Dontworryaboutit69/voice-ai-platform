@@ -2,6 +2,7 @@ import { Hero } from "@/components/landing/Hero";
 import { SocialProofBar } from "@/components/landing/SocialProofBar";
 import { ProblemSection } from "@/components/landing/ProblemSection";
 import { SolutionFeatures } from "@/components/landing/SolutionFeatures";
+import { AgentShowcase } from "@/components/landing/AgentShowcase";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { DemoPreview } from "@/components/landing/DemoPreview";
 import { ComparisonTable } from "@/components/landing/ComparisonTable";
@@ -20,6 +21,7 @@ export default function HomePage() {
       <SocialProofBar />
       <ProblemSection />
       <SolutionFeatures />
+      <AgentShowcase />
       <HowItWorks />
       <DemoPreview />
       <ComparisonTable />

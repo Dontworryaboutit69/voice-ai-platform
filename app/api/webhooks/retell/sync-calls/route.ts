@@ -7,6 +7,7 @@ const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 // Manual sync endpoint to fetch calls from Retell and sync to database
 export async function POST(request: NextRequest) {
   try {
+    console.log('[sync-calls] Starting sync - version 2.0');
     const { agentId } = await request.json();
 
     if (!agentId) {

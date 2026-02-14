@@ -85,3 +85,17 @@ export interface FooterColumn {
   title: string;
   links: { label: string; href: string }[];
 }
+
+export interface AgentPersona {
+  id: string;
+  name: string;
+  role: string;
+  industry: string;
+  description: string;
+  avatarGradient: string;
+  avatarEmoji: string;
+  accentColor: string;
+  audioUrl: string | null;
+  audioLabel: string;
+  stats: { label: string; value: string };
+}

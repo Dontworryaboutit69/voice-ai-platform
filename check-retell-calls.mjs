@@ -1,27 +1,35 @@
 import Retell from 'retell-sdk';
+import { readFileSync } from 'fs';
 
-const retell = new Retell({
-  apiKey: 'key_85da79d1d9da73aee899af323f23'
+const envContent = readFileSync('.env.local', 'utf8');
+const envVars = {};
+envContent.split('\n').forEach(line => {
+  const match = line.match(/^([^=]+)=(.*)$/);
+  if (match) envVars[match[1]] = match[2];
 });
 
-try {
-  const calls = await retell.call.list({
-    filter_agent_id: 'agent_a5f4f85fae3d437567417811e6',
-    limit: 5,
-    sort_order: 'descending'
-  });
+const retell = new Retell({ apiKey: envVars.RETELL_API_KEY });
+const dentalRetellAgentId = 'agent_fc977a82b680b6dfae4bfa7a15';
+
+console.log('\n📞 Recent calls from Retell for dental agent:\n');
+
+const calls = await retell.call.list({
+  filter_agent_id: dentalRetellAgentId,
+  limit: 10,
+  sort_order: 'descending'
+});
+
+console.log(`Total: ${calls.length} calls\n`);
+
+calls.forEach((call, idx) => {
+  const belongsToDental = call.agent_id === dentalRetellAgentId;
+  const marker = belongsToDental ? '✅ DENTAL' : '❌ OTHER';
   
-  console.log(`Found ${calls.length} calls`);
-  calls.forEach((call, i) => {
-    console.log(`\nCall ${i + 1}:`);
-    console.log(`  ID: ${call.call_id}`);
-    console.log(`  Status: ${call.call_status}`);
-    console.log(`  Started: ${call.start_timestamp}`);
-    console.log(`  Ended: ${call.end_timestamp || 'N/A'}`);
-    console.log(`  Duration: ${call.call_duration_ms || call.duration_ms || 'N/A'}ms`);
-    console.log(`  Has transcript: ${!!call.transcript}`);
-    console.log(`  Has recording: ${!!call.recording_url}`);
-  });
-} catch (error) {
-  console.error('Error:', error.message);
-}
+  console.log(`${idx + 1}. ${marker} - ${call.call_id}`);
+  console.log(`   Agent: ${call.agent_id}`);
+  console.log(`   Status: ${call.call_status}`);
+  console.log(`   Started: ${new Date(call.start_timestamp).toISOString()}`);
+  console.log(`   Ended: ${call.end_timestamp ? new Date(call.end_timestamp).toISOString() : 'N/A'}`);
+  console.log(`   Metadata: ${JSON.stringify(call.metadata)}`);
+  console.log('');
+});
