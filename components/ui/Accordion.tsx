@@ -23,8 +23,8 @@ export function Accordion({ items }: AccordionProps) {
             className={clsx(
               "rounded-xl border transition-all duration-300",
               isOpen
-                ? "border-white/15 bg-white/[0.04]"
-                : "border-white/8 bg-white/[0.02] hover:border-white/12"
+                ? "border-white/15 bg-white/5"
+                : "border-white/10 bg-white/5 hover:border-white/10"
             )}
           >
             <button

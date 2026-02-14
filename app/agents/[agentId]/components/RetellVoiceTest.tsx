@@ -73,7 +73,7 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
       }, 1000);
     });
 
-    retellClient.current.on('call_ended', () => {
+    retellClient.current.on('call_ended', async () => {
       console.log('Call ended');
       setIsCallActive(false);
       setIsConnecting(false);
@@ -83,6 +83,24 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
       }
       const duration = callDuration > 0 ? ` (${formatDuration(callDuration)})` : '';
       addMessage('system', `📴 Call ended${duration}`);
+
+      // Auto-sync call from Retell (workaround for webhook not firing)
+      addMessage('system', '🔄 Syncing call to database...');
+      try {
+        const response = await fetch(`/api/webhooks/retell/sync-calls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId })
+        });
+        const data = await response.json();
+        if (data.success) {
+          addMessage('system', `✅ Call saved! Check the Call History tab to see this conversation.`);
+        } else {
+          console.error('Sync failed:', data.error);
+        }
+      } catch (error) {
+        console.error('Error syncing call:', error);
+      }
     });
 
     retellClient.current.on('agent_start_talking', () => {

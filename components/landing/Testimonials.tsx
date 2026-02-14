@@ -8,7 +8,7 @@ export function Testimonials() {
   return (
     <section className="relative py-28 lg:py-36 overflow-hidden gradient-section-dark">
       {/* Ambient glow */}
-      <div className="absolute top-0 right-1/4 w-[500px] h-[500px] rounded-full bg-violet-600/8 blur-[160px]" />
+      <div className="absolute top-0 right-1/4 w-[500px] h-[500px] rounded-full bg-violet-600/10 blur-[160px]" />
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
@@ -27,7 +27,7 @@ export function Testimonials() {
           {testimonials.map((t, index) => (
             <SectionWrapper key={t.id} delay={0.1 * index}>
               <div
-                className={`relative rounded-2xl border border-white/8 bg-white/[0.02] p-8 transition-all duration-500 hover:border-white/15 hover:bg-white/[0.04] ${
+                className={`relative rounded-2xl border border-white/10 bg-white/5 p-8 transition-all duration-500 hover:border-white/15 hover:bg-white/10 ${
                   index === 1 ? "md:translate-y-8" : ""
                 }`}
               >
@@ -39,7 +39,7 @@ export function Testimonials() {
                 )}
 
                 {/* Quote icon */}
-                <Quote className="w-8 h-8 text-white/8 mb-6" />
+                <Quote className="w-8 h-8 text-white/10 mb-6" />
 
                 {/* Stars */}
                 <div className="flex gap-0.5 mb-4">

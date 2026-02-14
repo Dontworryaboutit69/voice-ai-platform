@@ -24,7 +24,7 @@ export function Footer() {
               {["X", "Li", "GH"].map((label) => (
                 <div
                   key={label}
-                  className="w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center text-xs text-white/30 hover:bg-white/10 hover:text-white/60 transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-xs text-white/30 hover:bg-white/10 hover:text-white/60 transition-colors cursor-pointer"
                 >
                   {label}
                 </div>

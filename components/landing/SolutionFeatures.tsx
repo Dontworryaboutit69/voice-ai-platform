@@ -43,7 +43,7 @@ export function SolutionFeatures() {
   return (
     <section id="features" className="relative py-28 lg:py-36 overflow-hidden gradient-section-dark">
       {/* Ambient glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full bg-indigo-600/8 blur-[160px]" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full bg-indigo-600/10 blur-[160px]" />
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
@@ -112,7 +112,7 @@ export function SolutionFeatures() {
             {miniFeatures.map(({ icon: Icon, label }) => (
               <div
                 key={label}
-                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full border border-white/8 bg-white/[0.03] hover:bg-white/5 hover:border-white/15 transition-all duration-300"
+                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/5 hover:border-white/15 transition-all duration-300"
               >
                 <Icon className="w-4 h-4 text-white/30" />
                 <span className="text-sm font-medium text-white/50">

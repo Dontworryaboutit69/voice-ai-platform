@@ -47,7 +47,7 @@ export function SecurityCompliance() {
               const Icon = iconMap[feature.icon];
               return (
                 <SectionWrapper key={feature.title} delay={0.1 * index}>
-                  <div className="rounded-xl border border-white/8 bg-white/[0.02] p-6 hover:bg-white/[0.04] hover:border-white/15 transition-all duration-300">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 hover:border-white/15 transition-all duration-300">
                     <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center mb-4">
                       {Icon && (
                         <Icon className="w-5 h-5 text-cyan-400" />

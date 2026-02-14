@@ -82,14 +82,14 @@ export function ComparisonTable() {
                     <tr
                       key={row.feature}
                       className={clsx(
-                        "transition-colors hover:bg-white/[0.02]",
+                        "transition-colors hover:bg-white/5",
                         index < comparisonRows.length - 1 && "border-b border-white/5"
                       )}
                     >
                       <td className="px-6 py-5 font-medium text-white/70 text-sm">
                         {row.feature}
                       </td>
-                      <td className="px-6 py-5 text-center bg-emerald-500/[0.03]">
+                      <td className="px-6 py-5 text-center bg-emerald-500/5">
                         <UsCell value={row.us} />
                       </td>
                       <td className="px-6 py-5 text-center">
@@ -110,7 +110,7 @@ export function ComparisonTable() {
         <div className="md:hidden space-y-3">
           {comparisonRows.map((row, index) => (
             <SectionWrapper key={row.feature} delay={0.05 * index}>
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
                 <h3 className="font-semibold text-white mb-4 text-sm">
                   {row.feature}
                 </h3>

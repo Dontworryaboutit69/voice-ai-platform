@@ -32,7 +32,7 @@ html {
 
 body {
   font-family: var(--font-body), system-ui, sans-serif;
-  color: var(--color-text-primary);
+  color: #ffffff;
   background: #000000;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

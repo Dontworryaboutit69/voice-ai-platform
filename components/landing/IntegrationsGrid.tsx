@@ -58,8 +58,8 @@ export function IntegrationsGrid() {
                   className={clsx(
                     "relative rounded-xl border p-6 text-center transition-all duration-300",
                     isComingSoon
-                      ? "border-white/5 bg-white/[0.01] opacity-50"
-                      : "border-white/8 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]"
+                      ? "border-white/5 bg-white/5 opacity-50"
+                      : "border-white/10 bg-white/5 hover:border-white/15 hover:bg-white/10"
                   )}
                 >
                   <div

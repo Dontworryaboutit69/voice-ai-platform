@@ -12,7 +12,7 @@ export function Pricing() {
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
       {/* Subtle glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-indigo-600/8 blur-[180px]" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-indigo-600/10 blur-[180px]" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
@@ -36,7 +36,7 @@ export function Pricing() {
                   "relative rounded-2xl border p-8 transition-all duration-500",
                   tier.isPopular
                     ? "border-indigo-500/30 bg-gradient-to-b from-indigo-500/10 via-indigo-500/5 to-transparent glow-indigo md:-translate-y-4"
-                    : "border-white/8 bg-white/[0.02] hover:border-white/15"
+                    : "border-white/10 bg-white/5 hover:border-white/15"
                 )}
               >
                 {/* Popular badge */}
@@ -85,7 +85,7 @@ export function Pricing() {
                     "group flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300",
                     tier.isPopular
                       ? "bg-white text-slate-900 hover:bg-white/90 shadow-lg shadow-white/10"
-                      : "bg-white/8 text-white/70 hover:bg-white/12 hover:text-white border border-white/10"
+                      : "bg-white/10 text-white/70 hover:bg-white/10 hover:text-white border border-white/10"
                   )}
                 >
                   {tier.cta.label}

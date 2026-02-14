@@ -15,7 +15,7 @@ export function StatsCredibility() {
 
       {/* Ambient glows */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[400px] rounded-full bg-indigo-600/10 blur-[160px]" />
-      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full bg-purple-600/8 blur-[140px]" />
+      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full bg-purple-600/10 blur-[140px]" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
@@ -36,7 +36,7 @@ export function StatsCredibility() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/5 rounded-2xl overflow-hidden">
           {platformStats.map((stat, index) => (
             <SectionWrapper key={stat.label} delay={0.1 * index}>
-              <div className="bg-black p-8 lg:p-10 text-center hover:bg-white/[0.02] transition-colors duration-300">
+              <div className="bg-black p-8 lg:p-10 text-center hover:bg-white/5 transition-colors duration-300">
                 <AnimatedCounter
                   value={stat.value}
                   className="block text-4xl sm:text-5xl font-extrabold text-white mb-2"
