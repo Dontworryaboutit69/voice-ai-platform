@@ -46,10 +46,19 @@ export async function POST(request: NextRequest) {
 
     let syncedCount = 0;
     let updatedCount = 0;
+    let skippedCount = 0;
 
     // Process each call
     for (const callRaw of callsList) {
       const call = callRaw as any; // Cast to any to work around Retell SDK type issues
+
+      // CRITICAL: Filter out calls from other agents
+      // Retell's filter_agent_id parameter doesn't work correctly, so we must filter here
+      if (call.agent_id !== agent.retell_agent_id) {
+        console.log(`[sync-calls] Skipping call ${call.call_id} - belongs to different agent ${call.agent_id}`);
+        skippedCount++;
+        continue;
+      }
 
       // Check if call already exists in database
       const { data: existingCall } = await supabase
@@ -102,9 +111,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Synced ${syncedCount} new calls, updated ${updatedCount} existing calls`,
+      message: `Synced ${syncedCount} new calls, updated ${updatedCount} existing calls (skipped ${skippedCount} calls from other agents)`,
       syncedCount,
       updatedCount,
+      skippedCount,
       totalProcessed: callsList.length
     });
 
