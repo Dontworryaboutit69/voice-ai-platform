@@ -98,6 +98,8 @@ export default function AgentDashboard() {
   const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
   const [selectedCall, setSelectedCall] = useState<any | null>(null);
   const [showCallDetailsModal, setShowCallDetailsModal] = useState(false);
+  const [callFeedback, setCallFeedback] = useState('');
+  const [isProcessingCallFeedback, setIsProcessingCallFeedback] = useState(false);
 
   // Tour state
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -262,6 +264,35 @@ export default function AgentDashboard() {
       alert(`Error configuring webhook: ${error.message}`);
     } finally {
       setIsConfiguringWebhook(false);
+    }
+  }
+
+  async function submitCallFeedback() {
+    if (!callFeedback.trim() || isProcessingCallFeedback) return;
+
+    const feedback = callFeedback.trim();
+    setCallFeedback('');
+    setIsProcessingCallFeedback(true);
+
+    try {
+      const response = await fetch(`/api/agents/${agentId}/improve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✅ Success! Prompt updated to version ${data.versionNumber}\n\n💡 Your AI has been trained based on this call!`);
+      } else {
+        alert(`❌ Failed to apply feedback: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      alert('❌ Failed to apply feedback - please try again');
+    } finally {
+      setIsProcessingCallFeedback(false);
     }
   }
 
@@ -2941,23 +2972,56 @@ export default function AgentDashboard() {
                 </div>
               )}
 
-              {/* Transcript Object (for formatted conversations) */}
+              {/* Interactive Transcript with Training Feedback */}
               {selectedCall.transcript_object && Array.isArray(selectedCall.transcript_object) && (
                 <div className="bg-gray-50 rounded-xl p-6">
                   <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span>💬</span> Conversation
+                    <span>💬</span> Transcript
+                    <span className="ml-auto text-xs font-normal text-gray-600 bg-yellow-100 px-3 py-1 rounded-full border border-yellow-200">
+                      🎯 Training Mode Active
+                    </span>
                   </h4>
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {selectedCall.transcript_object.map((turn: any, idx: number) => (
-                      <div key={idx} className={`p-4 rounded-lg ${
-                        turn.role === 'agent' ? 'bg-blue-100 ml-8' : 'bg-gray-200 mr-8'
-                      }`}>
-                        <p className="text-xs font-bold text-gray-600 mb-1 uppercase">
-                          {turn.role === 'agent' ? '🤖 Agent' : '👤 User'}
-                        </p>
-                        <p className="text-gray-900">{turn.content}</p>
+
+                  {/* Scrollable Transcript Area */}
+                  <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden flex flex-col" style={{ height: '500px' }}>
+                    {/* Messages - Scrollable */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                      {selectedCall.transcript_object.map((turn: any, idx: number) => (
+                        <div key={idx} className={`p-4 rounded-lg ${
+                          turn.role === 'agent' ? 'bg-blue-100 ml-8' : 'bg-gray-200 mr-8'
+                        }`}>
+                          <p className="text-xs font-bold text-gray-600 mb-1 uppercase">
+                            {turn.role === 'agent' ? '🤖 Agent' : '👤 User'}
+                          </p>
+                          <p className="text-gray-900">{turn.content}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Sticky Feedback Input - Always at bottom */}
+                    <div className="flex-shrink-0 border-t-2 border-yellow-200 bg-yellow-50 p-4">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          value={callFeedback}
+                          onChange={(e) => setCallFeedback(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && submitCallFeedback()}
+                          placeholder="Found an issue? Tell the AI how to improve (e.g., 'Be more empathetic when handling objections')"
+                          className="flex-1 px-4 py-3 border-2 border-yellow-300 bg-white rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium text-sm"
+                          disabled={isProcessingCallFeedback}
+                        />
+                        <button
+                          onClick={submitCallFeedback}
+                          disabled={!callFeedback.trim() || isProcessingCallFeedback}
+                          className="px-6 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-xl hover:from-yellow-700 hover:to-yellow-800 font-semibold shadow-lg shadow-yellow-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                        >
+                          {isProcessingCallFeedback ? '⏳ Training...' : '🎯 Improve'}
+                        </button>
                       </div>
-                    ))}
+                      <p className="text-xs text-yellow-700 mt-2 font-medium">
+                        💡 Scroll through the transcript and add feedback to train your AI based on this call
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
