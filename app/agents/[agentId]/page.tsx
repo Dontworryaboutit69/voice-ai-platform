@@ -26,7 +26,7 @@ interface PromptVersion {
   prompt_knowledge: string;
 }
 
-type Tab = 'prompt' | 'knowledge' | 'test' | 'voices' | 'calls' | 'integrations' | 'marketplace' | 'settings';
+type Tab = 'prompt' | 'knowledge' | 'test' | 'voices' | 'calls' | 'integrations' | 'marketplace' | 'settings' | 'ai-manager' | 'scoreboard';
 
 export default function AgentDashboard() {
   const params = useParams();
@@ -96,6 +96,8 @@ export default function AgentDashboard() {
   const [callsSearch, setCallsSearch] = useState('');
   const [isSyncingCalls, setIsSyncingCalls] = useState(false);
   const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
+  const [selectedCall, setSelectedCall] = useState<any | null>(null);
+  const [showCallDetailsModal, setShowCallDetailsModal] = useState(false);
 
   // Tour state
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -792,17 +794,6 @@ export default function AgentDashboard() {
         <div className="px-8 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <button
-                onClick={() => router.push('/agents')}
-                className="text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
-              >
-                <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="font-medium">All Agents</span>
-              </button>
-              <div className="h-8 w-px bg-gray-200"></div>
-
               {/* Agent Switcher Dropdown */}
               <div className="relative">
                 <button
@@ -939,8 +930,10 @@ export default function AgentDashboard() {
               { id: 'knowledge', icon: '📚', label: 'Knowledge Base', badge: 'Beta', ref: knowledgeTabRef },
               { id: 'voices', icon: '🎙️', label: 'Voices', badge: 'New', ref: null },
               { id: 'calls', icon: '📞', label: 'Call History', badge: null, ref: null },
+              { id: 'ai-manager', icon: '🤖', label: 'AI Manager', badge: null, ref: null },
               { id: 'integrations', icon: '🔌', label: 'Integrations', badge: null, ref: null },
               { id: 'marketplace', icon: '🛒', label: 'Marketplace', badge: null, ref: null },
+              { id: 'scoreboard', icon: '🏆', label: 'AI Scoreboard', badge: 'New', ref: null },
               { id: 'settings', icon: '⚙️', label: 'Settings', badge: null, ref: null }
             ].map(tab => (
               <button
@@ -973,41 +966,6 @@ export default function AgentDashboard() {
             ))}
           </nav>
 
-          {/* Enhanced Agent Stats Card */}
-          <div className="p-6 mt-6 border-t border-gray-200">
-            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-5 border border-gray-200 shadow-sm">
-              <div className="text-xs text-gray-500 uppercase font-bold mb-4 tracking-wider">Agent Performance</div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100">
-                  <div>
-                    <div className="text-xs text-gray-500 font-medium">Token Count</div>
-                    <div className="text-lg font-bold text-gray-900">{prompt.token_count}</div>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-xl">📊</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100">
-                  <div>
-                    <div className="text-xs text-gray-500 font-medium">Calls Handled</div>
-                    <div className="text-lg font-bold text-gray-900">0</div>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-xl">📞</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100">
-                  <div>
-                    <div className="text-xs text-gray-500 font-medium">Success Rate</div>
-                    <div className="text-lg font-bold text-gray-900">-</div>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-xl">✨</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Main Content Panel with Modern Cards */}
@@ -1521,7 +1479,13 @@ export default function AgentDashboard() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <button className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors">
+                              <button
+                                onClick={() => {
+                                  setSelectedCall(call);
+                                  setShowCallDetailsModal(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors"
+                              >
                                 View Details
                               </button>
                             </td>
@@ -1987,6 +1951,291 @@ export default function AgentDashboard() {
                   <p className="text-gray-500">
                     We're adding new agent templates regularly. Check back soon!
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI Scoreboard Tab */}
+          {activeTab === 'scoreboard' && (
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-10">
+                <h2 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-3">
+                  🏆 AI Scoreboard
+                </h2>
+                <p className="text-lg text-gray-600">Track your AI's performance and evolution</p>
+              </div>
+
+              {/* AI Evolution Progress */}
+              <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 rounded-3xl p-8 mb-8 shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2">AI Evolution Level</h3>
+                    <p className="text-purple-100">Earn points through successful interactions</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-5xl mb-2">👶</div>
+                    <p className="text-white font-bold">AI Infant</p>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="bg-white/20 rounded-full h-8 overflow-hidden backdrop-blur-sm mb-4">
+                  <div className="bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: '0%' }}>
+                    <span className="text-white font-bold text-sm">0 / 500</span>
+                  </div>
+                </div>
+
+                {/* Evolution Stages */}
+                <div className="grid grid-cols-5 gap-2">
+                  <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-3 border-2 border-white/30">
+                    <div className="text-2xl mb-1">👶</div>
+                    <p className="text-xs text-white font-bold">AI Infant</p>
+                    <p className="text-xs text-purple-200">0-100</p>
+                  </div>
+                  <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-3 opacity-50">
+                    <div className="text-2xl mb-1">🧒</div>
+                    <p className="text-xs text-white font-bold">AI Kid</p>
+                    <p className="text-xs text-purple-200">101-200</p>
+                  </div>
+                  <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-3 opacity-50">
+                    <div className="text-2xl mb-1">👨‍💼</div>
+                    <p className="text-xs text-white font-bold">AI Pro</p>
+                    <p className="text-xs text-purple-200">201-300</p>
+                  </div>
+                  <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-3 opacity-50">
+                    <div className="text-2xl mb-1">🦸</div>
+                    <p className="text-xs text-white font-bold">AI Hero</p>
+                    <p className="text-xs text-purple-200">301-400</p>
+                  </div>
+                  <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-3 opacity-50">
+                    <div className="text-2xl mb-1">💪</div>
+                    <p className="text-xs text-white font-bold">AI Chad</p>
+                    <p className="text-xs text-purple-200">401-500</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                  <p className="text-white text-sm mb-2">
+                    <strong>🎁 AI Chad Exclusive Benefits:</strong>
+                  </p>
+                  <ul className="text-white text-sm space-y-1 ml-4">
+                    <li>🎓 Free advanced training & workshops</li>
+                    <li>🔓 Early access to new features & unlocks</li>
+                    <li>💎 Exclusive marketplace discounts</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Point Rules */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span>📋</span> How to Earn Points
+                  </h3>
+                  <p className="text-blue-100 mt-1">Every action counts towards your AI's evolution</p>
+                </div>
+
+                <div className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">✅</span>
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">Successful Call</h4>
+                            <p className="text-sm text-gray-600">Call completed successfully</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-extrabold text-green-600">+1</p>
+                          <p className="text-xs text-gray-500">point</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">📝</span>
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">Prompt Adjustment</h4>
+                            <p className="text-sm text-gray-600">Script improvement approved</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-extrabold text-purple-600">+1</p>
+                          <p className="text-xs text-gray-500">point</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">📅</span>
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">Scheduled Appointment</h4>
+                            <p className="text-sm text-gray-600">Meeting booked successfully</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-extrabold text-blue-600">+2</p>
+                          <p className="text-xs text-gray-500">points</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-6 border-2 border-yellow-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">💰</span>
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">Deal Closed</h4>
+                            <p className="text-sm text-gray-600">Customer converted to sale</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-extrabold text-yellow-600">+3</p>
+                          <p className="text-xs text-gray-500">points</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-gray-700 to-gray-900 px-8 py-6">
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span>📊</span> Recent Activity
+                  </h3>
+                  <p className="text-gray-300 mt-1">Track your latest point-earning actions</p>
+                </div>
+
+                <div className="p-8">
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">🎯</div>
+                    <h4 className="text-xl font-bold text-gray-900 mb-2">No activity yet</h4>
+                    <p className="text-gray-600">
+                      Start making calls and improving your AI to earn points!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI Manager Tab */}
+          {activeTab === 'ai-manager' && (
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-10">
+                <h2 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-3">
+                  🤖 AI Manager
+                </h2>
+                <p className="text-lg text-gray-600">Weekly call analysis and automated script improvements</p>
+              </div>
+
+              {/* Overview Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-900">This Week</h3>
+                    <span className="text-3xl">📊</span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-purple-600">0</p>
+                  <p className="text-sm text-gray-600 mt-1">Calls Analyzed</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-900">Pending</h3>
+                    <span className="text-3xl">⏳</span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-blue-600">0</p>
+                  <p className="text-sm text-gray-600 mt-1">Script Changes</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-900">Approved</h3>
+                    <span className="text-3xl">✅</span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-green-600">0</p>
+                  <p className="text-sm text-gray-600 mt-1">This Month</p>
+                </div>
+              </div>
+
+              {/* Pending Script Changes Section */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
+                <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6">
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span>📝</span> Pending Script Improvements
+                  </h3>
+                  <p className="text-purple-100 mt-1">AI-generated suggestions based on call analysis</p>
+                </div>
+
+                <div className="p-8">
+                  {/* Empty State */}
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">🤖</div>
+                    <h4 className="text-xl font-bold text-gray-900 mb-2">No pending changes yet</h4>
+                    <p className="text-gray-600 mb-6">
+                      The AI Manager analyzes your calls every week and suggests script improvements.
+                    </p>
+                    <div className="inline-block bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
+                      <p className="text-sm text-gray-700">
+                        <strong>Next analysis:</strong> Every Monday at 9:00 AM
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* How It Works */}
+              <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-gray-200 p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                  <span>💡</span> How AI Manager Works
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">📞</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 mb-2">1. Analyze Calls</h4>
+                    <p className="text-sm text-gray-600">
+                      Reviews all call transcripts from the week to identify patterns and areas for improvement
+                    </p>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">🎯</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 mb-2">2. Generate Changes</h4>
+                    <p className="text-sm text-gray-600">
+                      AI suggests specific script improvements based on successful conversation patterns
+                    </p>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">✅</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 mb-2">3. You Approve</h4>
+                    <p className="text-sm text-gray-600">
+                      Review suggested changes and approve to automatically update your agent's script
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2611,6 +2860,129 @@ export default function AgentDashboard() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Call Details Modal */}
+      {showCallDetailsModal && selectedCall && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-6 rounded-t-3xl flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-bold">Call Details</h3>
+                <p className="text-blue-100 text-sm mt-1">
+                  {new Date(selectedCall.started_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCallDetailsModal(false);
+                  setSelectedCall(null);
+                }}
+                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all"
+              >
+                <span className="text-2xl">✕</span>
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              {/* Call Info Grid */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 font-semibold mb-1">From Number</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedCall.from_number || 'Unknown'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 font-semibold mb-1">To Number</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedCall.to_number || 'Unknown'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 font-semibold mb-1">Duration</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {selectedCall.duration_ms ? `${Math.ceil(selectedCall.duration_ms / 60000)}m ${Math.floor((selectedCall.duration_ms % 60000) / 1000)}s` : 'In Progress'}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 font-semibold mb-1">Status</p>
+                  <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${
+                    selectedCall.call_status === 'completed' ? 'bg-green-100 text-green-700' :
+                    selectedCall.call_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {selectedCall.call_status || 'Unknown'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Recording */}
+              {selectedCall.recording_url && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6">
+                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span>🎧</span> Call Recording
+                  </h4>
+                  <audio controls className="w-full">
+                    <source src={selectedCall.recording_url} type="audio/mpeg" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </div>
+              )}
+
+              {/* Transcript */}
+              {selectedCall.transcript && (
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span>📝</span> Transcript
+                  </h4>
+                  <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedCall.transcript}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Transcript Object (for formatted conversations) */}
+              {selectedCall.transcript_object && Array.isArray(selectedCall.transcript_object) && (
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span>💬</span> Conversation
+                  </h4>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {selectedCall.transcript_object.map((turn: any, idx: number) => (
+                      <div key={idx} className={`p-4 rounded-lg ${
+                        turn.role === 'agent' ? 'bg-blue-100 ml-8' : 'bg-gray-200 mr-8'
+                      }`}>
+                        <p className="text-xs font-bold text-gray-600 mb-1 uppercase">
+                          {turn.role === 'agent' ? '🤖 Agent' : '👤 User'}
+                        </p>
+                        <p className="text-gray-900">{turn.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Call Analysis */}
+              {selectedCall.call_analysis && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6">
+                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span>📊</span> Call Analysis
+                  </h4>
+                  <pre className="bg-white rounded-lg p-4 text-sm text-gray-700 overflow-x-auto">
+                    {JSON.stringify(selectedCall.call_analysis, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* No Data Message */}
+              {!selectedCall.transcript && !selectedCall.transcript_object && !selectedCall.recording_url && !selectedCall.call_analysis && selectedCall.call_status === 'in_progress' && (
+                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
+                  <p className="text-lg font-semibold text-yellow-800 mb-2">⏳ Call in Progress</p>
+                  <p className="text-sm text-yellow-700">
+                    This call is still active. Details will be available after the call ends.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

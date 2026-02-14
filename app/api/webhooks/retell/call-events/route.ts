@@ -23,27 +23,55 @@ async function handleCallStarted(
   callData: Record<string, unknown>,
   metadata: Record<string, unknown>,
 ) {
-  const supabase = createServiceClient();
+  try {
+    console.log(`[call_started] Starting...`);
+    console.log(`[call_started] ENV check:`, {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL
+    });
 
-  const agentId = metadata.agent_id as string;
+    const supabase = createServiceClient();
+    console.log(`[call_started] Client created`);
 
-  console.log(`[call_started] Agent ID: ${agentId}, Call ID: ${callData.call_id}`);
+    const agentId = metadata.agent_id as string;
+    console.log(`[call_started] Agent ID: ${agentId}, Call ID: ${callData.call_id}`);
 
-  const { data, error} = await supabase.from("calls").insert({
-    retell_call_id: callData.call_id as string,
-    agent_id: agentId,
-    from_number: (callData.from_number as string) ?? null,
-    to_number: (callData.to_number as string) ?? null,
-    started_at: (callData.start_timestamp as string) ?? new Date().toISOString(),
-    call_status: "in_progress",
-  });
+    const insertData = {
+      retell_call_id: callData.call_id as string,
+      agent_id: agentId,
+      from_number: (callData.from_number as string) ?? null,
+      to_number: (callData.to_number as string) ?? null,
+      started_at: (callData.start_timestamp as string) ?? new Date().toISOString(),
+      call_status: "in_progress" as const,
+    };
 
-  if (error) {
-    console.error("[call_started] Failed to insert call record:", error);
-    console.error("[call_started] Error details:", JSON.stringify(error, null, 2));
-  } else {
-    console.log(`[call_started] Successfully created call record for ${callData.call_id}`);
-    console.log("[call_started] Inserted data:", data);
+    console.log(`[call_started] Inserting:`, insertData);
+
+    const { data, error } = await supabase
+      .from("calls")
+      .insert(insertData)
+      .select();
+
+    console.log(`[call_started] Insert complete`);
+    console.log(`[call_started] Error:`, error);
+    console.log(`[call_started] Data:`, data);
+
+    if (error) {
+      console.error("[call_started] ❌ INSERT FAILED");
+      console.error("[call_started] Error message:", error.message);
+      console.error("[call_started] Error code:", error.code);
+      console.error("[call_started] Error details:", error.details);
+      console.error("[call_started] Error hint:", error.hint);
+      console.error("[call_started] Full error:", JSON.stringify(error, null, 2));
+    } else {
+      console.log(`[call_started] ✅ SUCCESS! Created call for ${callData.call_id}`);
+      console.log("[call_started] Result:", JSON.stringify(data));
+    }
+  } catch (err: any) {
+    console.error("[call_started] EXCEPTION:", err);
+    console.error("[call_started] Exception message:", err.message);
+    console.error("[call_started] Exception stack:", err.stack);
   }
 }
 
@@ -146,11 +174,25 @@ async function handleCallAnalyzed(
 // Route handler
 // ---------------------------------------------------------------------------
 
+// GET endpoint for webhook verification
+export async function GET() {
+  return NextResponse.json({
+    status: 'ok',
+    message: 'Retell webhook endpoint is reachable',
+    timestamp: new Date().toISOString()
+  });
+}
+
 export async function POST(request: Request) {
   try {
+    console.log('[Retell Webhook] ===== WEBHOOK RECEIVED =====');
+    console.log('[Retell Webhook] Time:', new Date().toISOString());
+    console.log('[Retell Webhook] Headers:', Object.fromEntries(request.headers.entries()));
+
     const body = await request.json();
 
-    console.log('[Retell Webhook] Received event:', body.event || 'unknown');
+    console.log('[Retell Webhook] Body:', JSON.stringify(body, null, 2));
+    console.log('[Retell Webhook] Event:', body.event || 'unknown');
     console.log('[Retell Webhook] Call ID:', body.call?.call_id || body.data?.call_id || 'unknown');
 
     const event: string | undefined = body.event;

@@ -47,6 +47,7 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
   const [selectedVoice, setSelectedVoice] = useState('11labs-Adrian');
   const [selectedModel, setSelectedModel] = useState('gpt-5.2');
   const [callDuration, setCallDuration] = useState(0);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const retellClient = useRef<RetellWebClient | null>(null);
   const callStartTime = useRef<number | null>(null);
@@ -295,6 +296,11 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   return (
     <div className="h-full flex flex-col relative">
       {/* Training Overlay - Blocks all interaction while processing */}
@@ -465,8 +471,8 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
         )}
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-auto p-6 space-y-4 bg-gray-50">
+      {/* Messages Area - Fixed height with scroll */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 min-h-0">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-20">
             <div className="text-6xl mb-4">
@@ -483,38 +489,42 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
             </p>
           </div>
         ) : (
-          messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex ${
-                msg.role === 'user' ? 'justify-end' :
-                msg.role === 'system' ? 'justify-center' : 'justify-start'
-              }`}
-            >
+          <>
+            {messages.map((msg, idx) => (
               <div
-                className={`max-w-[75%] rounded-2xl px-5 py-3 ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20'
-                    : msg.role === 'system'
-                    ? 'bg-yellow-100 text-yellow-900 text-sm italic border-2 border-yellow-200'
-                    : 'bg-white text-gray-900 border-2 border-gray-200 shadow-sm'
+                key={idx}
+                className={`flex ${
+                  msg.role === 'user' ? 'justify-end' :
+                  msg.role === 'system' ? 'justify-center' : 'justify-start'
                 }`}
               >
-                {msg.role === 'agent' && (
-                  <div className="text-xs text-gray-500 mb-1 font-semibold">🤖 AI Agent</div>
-                )}
-                <div className="whitespace-pre-wrap">{msg.text}</div>
-                <div className="text-xs opacity-70 mt-2">
-                  {msg.timestamp.toLocaleTimeString()}
+                <div
+                  className={`max-w-[75%] rounded-2xl px-5 py-3 ${
+                    msg.role === 'user'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20'
+                      : msg.role === 'system'
+                      ? 'bg-yellow-100 text-yellow-900 text-sm italic border-2 border-yellow-200'
+                      : 'bg-white text-gray-900 border-2 border-gray-200 shadow-sm'
+                  }`}
+                >
+                  {msg.role === 'agent' && (
+                    <div className="text-xs text-gray-500 mb-1 font-semibold">🤖 AI Agent</div>
+                  )}
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  <div className="text-xs opacity-70 mt-2">
+                    {msg.timestamp.toLocaleTimeString()}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+            {/* Scroll target - invisible element to scroll to */}
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
 
-      {/* Input Area */}
-      <div className="bg-white border-t-2 border-gray-200 p-6 space-y-4">
+      {/* Input Area - Sticky at bottom */}
+      <div className="flex-shrink-0 bg-white border-t-2 border-gray-200 p-6 space-y-4">
         {/* Main Input */}
         {testMode === 'text' ? (
           <div className="flex gap-3">

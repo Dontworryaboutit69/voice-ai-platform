@@ -1,0 +1,17 @@
+#!/bin/bash
+# We need to add SUPABASE_SERVICE_ROLE_KEY to Vercel manually
+echo "Environment variables need to be added to Vercel dashboard:"
+echo ""
+echo "1. Go to: https://vercel.com/kyles-projects-84986792/voice-ai-platform/settings/environment-variables"
+echo ""
+echo "2. Add these environment variables:"
+echo ""
+echo "   SUPABASE_SERVICE_ROLE_KEY"
+echo "   Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvZW5kd256cHNtenRnb25yeHpxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDk1NDEzMCwiZXhwIjoyMDg2NTMwMTMwfQ.98ObnIbcDcfFpc5UTVwDbzk87l60-00IwsMcco9_ryE"
+echo "   Environments: Production, Preview, Development"
+echo ""
+echo "   RETELL_API_KEY"
+echo "   Value: key_85da79d1d9da73aee899af323f23"
+echo "   Environments: Production, Preview, Development"
+echo ""
+echo "3. Redeploy after adding"
