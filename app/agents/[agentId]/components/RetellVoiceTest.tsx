@@ -456,15 +456,6 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
           </button>
         </div>
 
-        {/* Training Mode Notice */}
-        {trainingMode && (
-          <div className="mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-            <p className="text-sm text-yellow-800 font-medium">
-              <strong>Training Mode Active:</strong> Provide feedback below to improve the prompt in real-time.
-            </p>
-          </div>
-        )}
-
         {/* Call Duration (Voice mode only) */}
         {testMode === 'voice' && isCallActive && (
           <div className="mt-4 flex items-center justify-center gap-3 p-3 bg-white rounded-xl border border-green-200">
@@ -476,125 +467,271 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
         )}
       </div>
 
-      {/* Messages Area - Fixed height with scroll */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 min-h-0">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-20">
-            <div className="text-6xl mb-4">
-              {testMode === 'voice' ? '🎤' : '💬'}
+      {/* Side-by-Side Layout when Training Mode is Active */}
+      {trainingMode ? (
+        <div className="flex-1 flex gap-6 p-6 bg-gray-50 min-h-0">
+          {/* Left: Conversation */}
+          <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-xl border-2 border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b-2 border-blue-200">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <span>💬</span> Live Conversation
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">Watch and listen as your AI agent responds</p>
             </div>
-            <p className="text-xl font-semibold mb-2">
-              {testMode === 'voice' ? 'Start a Voice Call' : 'Start Typing'}
-            </p>
-            <p className="text-sm text-gray-600">
-              {testMode === 'voice'
-                ? 'Click "Start Call" below to begin a natural conversation with your AI agent'
-                : 'Type a message to test your agent in text mode'
-              }
-            </p>
-          </div>
-        ) : (
-          <>
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${
-                  msg.role === 'user' ? 'justify-end' :
-                  msg.role === 'system' ? 'justify-center' : 'justify-start'
-                }`}
-              >
-                <div
-                  className={`max-w-[75%] rounded-2xl px-5 py-3 ${
-                    msg.role === 'user'
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20'
-                      : msg.role === 'system'
-                      ? 'bg-yellow-100 text-yellow-900 text-sm italic border-2 border-yellow-200'
-                      : 'bg-white text-gray-900 border-2 border-gray-200 shadow-sm'
-                  }`}
-                >
-                  {msg.role === 'agent' && (
-                    <div className="text-xs text-gray-500 mb-1 font-semibold">🤖 AI Agent</div>
-                  )}
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
-                  <div className="text-xs opacity-70 mt-2">
-                    {msg.timestamp.toLocaleTimeString()}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {/* Scroll target - invisible element to scroll to */}
-            <div ref={messagesEndRef} />
-          </>
-        )}
-      </div>
 
-      {/* Input Area - Sticky at bottom */}
-      <div className="flex-shrink-0 bg-white border-t-2 border-gray-200 p-6 space-y-4">
-        {/* Main Input */}
-        {testMode === 'text' ? (
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
-              placeholder="Type your message..."
-              className="flex-1 px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
-            />
-            <button
-              onClick={sendTextMessage}
-              disabled={!textInput.trim()}
-              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              Send
-            </button>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
+              {messages.length === 0 ? (
+                <div className="text-center text-gray-500 py-20">
+                  <div className="text-6xl mb-4">
+                    {testMode === 'voice' ? '🎤' : '💬'}
+                  </div>
+                  <p className="text-xl font-semibold mb-2">
+                    {testMode === 'voice' ? 'Start a Voice Call' : 'Start Typing'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {testMode === 'voice'
+                      ? 'Click "Start Call" below to begin'
+                      : 'Type a message to test your agent'
+                    }
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {messages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex ${
+                        msg.role === 'user' ? 'justify-end' :
+                        msg.role === 'system' ? 'justify-center' : 'justify-start'
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[75%] rounded-2xl px-5 py-3 ${
+                          msg.role === 'user'
+                            ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20'
+                            : msg.role === 'system'
+                            ? 'bg-yellow-100 text-yellow-900 text-sm italic border-2 border-yellow-200'
+                            : 'bg-white text-gray-900 border-2 border-gray-200 shadow-sm'
+                        }`}
+                      >
+                        {msg.role === 'agent' && (
+                          <div className="text-xs text-gray-500 mb-1 font-semibold">🤖 AI Agent</div>
+                        )}
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                        <div className="text-xs opacity-70 mt-2">
+                          {msg.timestamp.toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            {/* Input at bottom of conversation */}
+            <div className="flex-shrink-0 bg-white border-t-2 border-gray-200 p-6">
+              {testMode === 'text' ? (
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                    placeholder="Type your message..."
+                    className="flex-1 px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                  />
+                  <button
+                    onClick={sendTextMessage}
+                    disabled={!textInput.trim()}
+                    className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    Send
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  {!isCallActive && !isConnecting ? (
+                    <button
+                      onClick={startVoiceCall}
+                      className="px-10 py-5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-2xl hover:from-green-700 hover:to-green-800 font-bold text-lg shadow-xl shadow-green-600/30 transition-all hover:scale-105"
+                    >
+                      📞 Start Call
+                    </button>
+                  ) : isConnecting ? (
+                    <div className="px-10 py-5 bg-gray-100 text-gray-700 rounded-2xl font-bold text-lg flex items-center gap-3">
+                      <div className="w-5 h-5 border-3 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                      Connecting...
+                    </div>
+                  ) : (
+                    <button
+                      onClick={stopVoiceCall}
+                      className="px-10 py-5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 font-bold text-lg shadow-xl shadow-red-600/30 transition-all animate-pulse"
+                    >
+                      📴 End Call
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="flex justify-center">
-            {!isCallActive && !isConnecting ? (
+
+          {/* Right: Training Notes */}
+          <div className="w-[500px] flex flex-col bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl shadow-xl border-2 border-yellow-300 overflow-hidden">
+            <div className="bg-gradient-to-r from-yellow-100 to-orange-100 px-6 py-4 border-b-2 border-yellow-300">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <span>🎯</span> Training Notes
+              </h3>
+              <p className="text-sm text-gray-700 mt-1">Write what needs to improve</p>
+            </div>
+
+            <div className="flex-1 p-6 flex flex-col min-h-0">
+              <div className="mb-4 bg-yellow-100 border-2 border-yellow-300 rounded-xl p-4">
+                <p className="text-sm font-bold text-yellow-900 mb-2">💡 How to Use Training Mode:</p>
+                <ul className="text-xs text-yellow-800 space-y-1.5">
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold">1.</span>
+                    <span>Test your agent on the left (voice or text)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold">2.</span>
+                    <span>Take notes here about what needs fixing</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold">3.</span>
+                    <span>Click "🚀 Train AI" to apply improvements</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold">4.</span>
+                    <span>Test again to verify the changes worked</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="flex-1 flex flex-col min-h-0">
+                <label className="text-sm font-bold text-gray-900 mb-2">Your Training Feedback:</label>
+                <textarea
+                  value={feedbackInput}
+                  onChange={(e) => setFeedbackInput(e.target.value)}
+                  placeholder="Example notes:&#10;&#10;• Greeting is too long - make it 2 sentences max&#10;• Add more empathy when handling objections&#10;• Ask about budget earlier in conversation&#10;• Use simpler language, avoid jargon&#10;• Be more enthusiastic and energetic"
+                  className="flex-1 px-4 py-3 border-2 border-yellow-300 bg-white rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium text-sm resize-none min-h-0"
+                  disabled={isProcessingFeedback}
+                />
+              </div>
+
               <button
-                onClick={startVoiceCall}
-                className="px-10 py-5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-2xl hover:from-green-700 hover:to-green-800 font-bold text-lg shadow-xl shadow-green-600/30 transition-all hover:scale-105"
+                onClick={submitFeedback}
+                disabled={!feedbackInput.trim() || isProcessingFeedback}
+                className="mt-4 w-full px-8 py-4 bg-gradient-to-r from-yellow-600 to-orange-600 text-white rounded-xl hover:from-yellow-700 hover:to-orange-700 font-bold text-lg shadow-lg shadow-yellow-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
               >
-                📞 Start Call
+                {isProcessingFeedback ? '⏳ Training AI...' : '🚀 Train AI Now'}
               </button>
-            ) : isConnecting ? (
-              <div className="px-10 py-5 bg-gray-100 text-gray-700 rounded-2xl font-bold text-lg flex items-center gap-3">
-                <div className="w-5 h-5 border-3 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                Connecting...
+
+              <p className="text-xs text-gray-600 text-center mt-3">
+                Tip: Be specific! "Make greeting shorter" is better than "improve greeting"
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Normal Layout when Training Mode is OFF */
+        <>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 min-h-0">
+            {messages.length === 0 ? (
+              <div className="text-center text-gray-500 py-20">
+                <div className="text-6xl mb-4">
+                  {testMode === 'voice' ? '🎤' : '💬'}
+                </div>
+                <p className="text-xl font-semibold mb-2">
+                  {testMode === 'voice' ? 'Start a Voice Call' : 'Start Typing'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {testMode === 'voice'
+                    ? 'Click "Start Call" below to begin a natural conversation with your AI agent'
+                    : 'Type a message to test your agent in text mode'
+                  }
+                </p>
               </div>
             ) : (
-              <button
-                onClick={stopVoiceCall}
-                className="px-10 py-5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 font-bold text-lg shadow-xl shadow-red-600/30 transition-all animate-pulse"
-              >
-                📴 End Call
-              </button>
+              <>
+                {messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex ${
+                      msg.role === 'user' ? 'justify-end' :
+                      msg.role === 'system' ? 'justify-center' : 'justify-start'
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[75%] rounded-2xl px-5 py-3 ${
+                        msg.role === 'user'
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20'
+                          : msg.role === 'system'
+                          ? 'bg-yellow-100 text-yellow-900 text-sm italic border-2 border-yellow-200'
+                          : 'bg-white text-gray-900 border-2 border-gray-200 shadow-sm'
+                      }`}
+                    >
+                      {msg.role === 'agent' && (
+                        <div className="text-xs text-gray-500 mb-1 font-semibold">🤖 AI Agent</div>
+                      )}
+                      <div className="whitespace-pre-wrap">{msg.text}</div>
+                      <div className="text-xs opacity-70 mt-2">
+                        {msg.timestamp.toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </>
             )}
           </div>
-        )}
 
-        {/* Training Mode Feedback */}
-        {trainingMode && (
-          <div className="flex gap-3 pt-4 border-t-2 border-yellow-200 bg-yellow-50 px-4 py-3 rounded-xl">
-            <input
-              type="text"
-              value={feedbackInput}
-              onChange={(e) => setFeedbackInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && submitFeedback()}
-              placeholder="Tell the AI what to improve (e.g., 'Make the greeting shorter')"
-              className="flex-1 px-5 py-3 border-2 border-yellow-300 bg-white rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium"
-            />
-            <button
-              onClick={submitFeedback}
-              disabled={!feedbackInput.trim() || isProcessingFeedback}
-              className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-xl hover:from-yellow-700 hover:to-yellow-800 font-semibold shadow-lg shadow-yellow-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {isProcessingFeedback ? '⏳ Processing...' : '🎯 Improve'}
-            </button>
+          <div className="flex-shrink-0 bg-white border-t-2 border-gray-200 p-6 space-y-4">
+            {testMode === 'text' ? (
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendTextMessage()}
+                  placeholder="Type your message..."
+                  className="flex-1 px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                />
+                <button
+                  onClick={sendTextMessage}
+                  disabled={!textInput.trim()}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Send
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                {!isCallActive && !isConnecting ? (
+                  <button
+                    onClick={startVoiceCall}
+                    className="px-10 py-5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-2xl hover:from-green-700 hover:to-green-800 font-bold text-lg shadow-xl shadow-green-600/30 transition-all hover:scale-105"
+                  >
+                    📞 Start Call
+                  </button>
+                ) : isConnecting ? (
+                  <div className="px-10 py-5 bg-gray-100 text-gray-700 rounded-2xl font-bold text-lg flex items-center gap-3">
+                    <div className="w-5 h-5 border-3 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    Connecting...
+                  </div>
+                ) : (
+                  <button
+                    onClick={stopVoiceCall}
+                    className="px-10 py-5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 font-bold text-lg shadow-xl shadow-red-600/30 transition-all animate-pulse"
+                  >
+                    📴 End Call
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
