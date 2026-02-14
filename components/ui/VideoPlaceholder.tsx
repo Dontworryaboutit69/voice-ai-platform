@@ -44,24 +44,21 @@ export function VideoPlaceholder({
   return (
     <div
       className={clsx(
-        "relative rounded-2xl overflow-hidden bg-slate-900 flex items-center justify-center group cursor-pointer",
+        "relative overflow-hidden bg-gradient-to-b from-indigo-950/50 to-black flex items-center justify-center group cursor-pointer",
         aspectClasses[aspectRatio],
         className
       )}
     >
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/50 via-purple-900/50 to-pink-900/50" />
+      {/* Dot grid */}
+      <div className="absolute inset-0 dot-grid opacity-50" />
 
       {/* Play button */}
       <div className="relative z-10 flex flex-col items-center gap-4">
-        <div className="w-20 h-20 rounded-full gradient-brand flex items-center justify-center shadow-2xl shadow-indigo-500/30 group-hover:scale-110 transition-transform duration-300">
-          <Play className="w-8 h-8 text-white ml-1" fill="white" />
+        <div className="w-16 h-16 rounded-full bg-white/10 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:bg-white/15 transition-all duration-300">
+          <Play className="w-6 h-6 text-white/60 ml-0.5" />
         </div>
-        <span className="text-sm font-medium text-white/70">{label}</span>
+        <span className="text-sm text-white/30 font-medium">{label}</span>
       </div>
-
-      {/* Decorative grid */}
-      <div className="absolute inset-0 dot-grid opacity-30" />
     </div>
   );
 }

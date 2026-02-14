@@ -129,7 +129,17 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
 
     retellClient.current.on('error', (error: any) => {
       console.error('Retell error:', error);
-      addMessage('system', '❌ Error: ' + (error.message || 'Connection failed'));
+      console.error('Error details:', JSON.stringify(error, null, 2));
+
+      let errorMsg = 'Connection failed';
+      if (error.message) {
+        errorMsg = error.message;
+      }
+      if (error.code === 8 || errorMsg.includes('timeout')) {
+        errorMsg = 'Connection timeout - this usually means:\n• Retell service is temporarily unavailable\n• Your network is blocking WebRTC\n• Microphone permissions denied\n\nTry refreshing the page and clicking "Allow" when prompted for microphone access.';
+      }
+
+      addMessage('system', '❌ Error: ' + errorMsg);
       setIsCallActive(false);
       setIsConnecting(false);
     });
@@ -147,10 +157,22 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
   async function startVoiceCall() {
     setIsConnecting(true);
 
+    // Check microphone permissions first
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone access granted');
+      addMessage('system', '🎤 Microphone ready');
+    } catch (micError: any) {
+      console.error('Microphone permission error:', micError);
+      addMessage('system', '❌ Microphone access denied. Please allow microphone access in your browser settings and try again.');
+      setIsConnecting(false);
+      return;
+    }
+
     // Add timeout to prevent infinite connecting state
     const timeout = setTimeout(() => {
       setIsConnecting(false);
-      addMessage('system', '❌ Connection timeout. Please check your internet connection and try again.');
+      addMessage('system', '❌ Connection timeout. Retell service may be temporarily unavailable. Try again in a moment.');
     }, 15000); // 15 second timeout
 
     try {

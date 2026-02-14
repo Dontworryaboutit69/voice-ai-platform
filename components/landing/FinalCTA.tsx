@@ -1,34 +1,35 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
-import { Container } from "@/components/ui/Container";
+import { ArrowRight, Check } from "lucide-react";
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
 
 export function FinalCTA() {
   return (
-    <section className="py-24 lg:py-32 relative overflow-hidden">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 animate-gradient" />
+    <section className="relative py-28 lg:py-36 overflow-hidden bg-black">
+      {/* Gradient background */}
+      <div className="absolute inset-0 gradient-hero" />
 
-      {/* Floating orbs */}
+      {/* Breathing orbs */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full bg-white/10 blur-[100px] animate-float" />
+        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full bg-indigo-500/15 blur-[160px] animate-breathe" />
         <div
-          className="absolute -bottom-20 -right-20 w-[500px] h-[500px] rounded-full bg-white/10 blur-[100px] animate-float-reverse"
-          style={{ animationDelay: "3s" }}
+          className="absolute bottom-[-10%] right-[20%] w-[400px] h-[400px] rounded-full bg-purple-600/10 blur-[140px] animate-breathe"
+          style={{ animationDelay: "2s" }}
         />
       </div>
 
       {/* Dot grid */}
-      <div className="absolute inset-0 dot-grid opacity-20" />
+      <div className="absolute inset-0 dot-grid" />
 
-      <Container className="relative z-10">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
-          <div className="text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white font-[var(--font-heading)] tracking-tight leading-tight">
-              Every Missed Call Is a Lost Customer
+          <div className="text-center">
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
+              Every Missed Call
+              <br />
+              <span className="text-white/40">Is a Lost Customer</span>
             </h2>
-            <p className="mt-6 text-xl text-white/80 max-w-2xl mx-auto leading-relaxed">
+            <p className="mt-6 text-xl text-white/40 max-w-xl mx-auto leading-relaxed">
               Build your agent in 5 minutes. Test it free. No credit card
               required.
             </p>
@@ -36,7 +37,7 @@ export function FinalCTA() {
             <div className="mt-10">
               <a
                 href="/agents"
-                className="group inline-flex items-center gap-3 px-12 py-5 rounded-2xl bg-white text-slate-900 font-bold text-lg shadow-2xl shadow-black/20 hover:shadow-3xl hover:scale-[1.02] transition-all duration-300"
+                className="group inline-flex items-center gap-3 px-10 py-4.5 rounded-xl bg-white text-slate-900 font-bold text-lg shadow-2xl shadow-white/10 hover:shadow-white/20 hover:scale-[1.02] transition-all duration-300"
               >
                 Start Building Free
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -44,31 +45,21 @@ export function FinalCTA() {
             </div>
 
             {/* Trust pills */}
-            <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-white/70">
+            <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-white/30">
               {[
                 "No credit card required",
                 "Setup in 5 minutes",
                 "Cancel anytime",
               ].map((text) => (
                 <div key={text} className="flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-white/60 flex-shrink-0"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <Check className="w-3.5 h-3.5 text-emerald-400/60" />
                   <span>{text}</span>
                 </div>
               ))}
             </div>
           </div>
         </SectionWrapper>
-      </Container>
+      </div>
     </section>
   );
 }

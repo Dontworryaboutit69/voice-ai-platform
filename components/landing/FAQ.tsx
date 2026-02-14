@@ -1,21 +1,24 @@
 "use client";
 
-import { Container } from "@/components/ui/Container";
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
 import { Accordion } from "@/components/ui/Accordion";
 import { faqItems } from "@/lib/constants/landing-data";
 
 export function FAQ() {
   return (
-    <section id="faq" className="py-24 lg:py-32 bg-white">
-      <Container size="narrow">
+    <section id="faq" className="relative py-28 lg:py-36 overflow-hidden gradient-section-dark">
+      {/* Gradient line */}
+      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 font-[var(--font-heading)] tracking-tight">
-              Frequently Asked{" "}
+          <div className="text-center mb-16">
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
+              Frequently Asked
+              <br />
               <span className="gradient-text">Questions</span>
             </h2>
-            <p className="mt-4 text-lg text-slate-500">
+            <p className="mt-6 text-lg text-white/40">
               Everything you need to know before getting started.
             </p>
           </div>
@@ -24,7 +27,7 @@ export function FAQ() {
         <SectionWrapper delay={0.2}>
           <Accordion items={faqItems} />
         </SectionWrapper>
-      </Container>
+      </div>
     </section>
   );
 }
