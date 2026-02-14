@@ -72,19 +72,14 @@ export async function POST(request: NextRequest) {
         agent_id: agentId,
         from_number: call.from_number || null,
         to_number: call.to_number || null,
-        retell_agent_id: call.agent_id || null,
         started_at: call.start_timestamp || new Date().toISOString(),
         ended_at: call.end_timestamp || null,
         duration_ms: call.call_duration_ms || call.duration_ms || null,
         transcript: typeof call.transcript === 'string' ? call.transcript : null,
         transcript_object: call.transcript_object || null,
         recording_url: call.recording_url || null,
-        public_log_url: call.public_log_url || null,
         call_status: call.call_status || (call.end_timestamp ? 'completed' : 'in_progress'),
-        disconnection_reason: call.disconnection_reason || null,
-        call_analysis: call.call_analysis || null,
-        call_summary: call.call_analysis?.call_summary || null,
-        sentiment: call.call_analysis?.user_sentiment || null
+        call_analysis: call.call_analysis || null
       };
 
       if (existingCall) {

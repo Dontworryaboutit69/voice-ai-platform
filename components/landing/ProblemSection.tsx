@@ -1,10 +1,8 @@
 "use client";
 
 import { Code2, Bot, DollarSign } from "lucide-react";
-import { Container } from "@/components/ui/Container";
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
 import { problemCards } from "@/lib/constants/landing-data";
-import { clsx } from "clsx";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Code2,
@@ -12,63 +10,89 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   DollarSign,
 };
 
-const accentMap: Record<string, { bg: string; text: string; glow: string }> = {
-  red: { bg: "bg-red-500/10", text: "text-red-400", glow: "hover:shadow-red-500/10" },
-  orange: { bg: "bg-orange-500/10", text: "text-orange-400", glow: "hover:shadow-orange-500/10" },
-  yellow: { bg: "bg-yellow-500/10", text: "text-yellow-400", glow: "hover:shadow-yellow-500/10" },
+const accentColors: Record<string, { border: string; icon: string; glow: string }> = {
+  red: {
+    border: "border-red-500/20",
+    icon: "text-red-400",
+    glow: "bg-red-500/5",
+  },
+  orange: {
+    border: "border-orange-500/20",
+    icon: "text-orange-400",
+    glow: "bg-orange-500/5",
+  },
+  yellow: {
+    border: "border-yellow-500/20",
+    icon: "text-yellow-400",
+    glow: "bg-yellow-500/5",
+  },
 };
 
 export function ProblemSection() {
   return (
-    <section className="py-24 lg:py-32 bg-slate-950 relative overflow-hidden">
-      {/* Subtle radial glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-red-900/10 blur-[200px]" />
+    <section className="relative py-28 lg:py-36 bg-black overflow-hidden">
+      {/* Subtle warm glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] rounded-full bg-red-950/30 blur-[200px]" />
 
-      <Container className="relative z-10">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white font-[var(--font-heading)] tracking-tight">
-              Stop Losing Customers to Voicemail
+          <div className="max-w-2xl mx-auto text-center mb-20">
+            <p className="text-red-400/80 text-sm font-medium tracking-[0.2em] uppercase mb-4">
+              The Problem
+            </p>
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
+              Stop Losing Customers
+              <br />
+              <span className="text-white/40">to Voicemail</span>
             </h2>
-            <p className="mt-4 text-lg text-slate-400 leading-relaxed">
+            <p className="mt-6 text-lg text-white/40 leading-relaxed max-w-xl mx-auto">
               Every missed call is lost revenue. Traditional solutions are broken.
             </p>
           </div>
         </SectionWrapper>
 
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+        {/* Stacked rows — not a card grid */}
+        <div className="space-y-4">
           {problemCards.map((card, index) => {
             const Icon = iconMap[card.icon];
-            const accent = accentMap[card.accentColor];
+            const accent = accentColors[card.accentColor];
 
             return (
               <SectionWrapper key={card.title} delay={0.1 * index}>
                 <div
-                  className={clsx(
-                    "glass rounded-2xl p-8 transition-all duration-500 hover:shadow-2xl",
-                    accent.glow
-                  )}
+                  className={`group relative rounded-2xl border ${accent.border} ${accent.glow} p-8 sm:p-10 transition-all duration-500 hover:border-white/10`}
                 >
-                  <div
-                    className={clsx(
-                      "w-14 h-14 rounded-xl flex items-center justify-center mb-6",
-                      accent.bg
-                    )}
-                  >
-                    {Icon && <Icon className={clsx("w-7 h-7", accent.text)} />}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-6">
+                    {/* Icon */}
+                    <div className="flex-shrink-0">
+                      <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center">
+                        {Icon && <Icon className={`w-6 h-6 ${accent.icon}`} />}
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-white mb-1">
+                        {card.title}
+                      </h3>
+                      <p className="text-white/40 leading-relaxed">
+                        {card.description}
+                      </p>
+                    </div>
+
+                    {/* Decorative arrow */}
+                    <div className="hidden sm:flex flex-shrink-0 w-10 h-10 items-center justify-center rounded-full bg-white/5 text-white/20 group-hover:text-white/40 transition-colors">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 12L12 4M12 4H6M12 4V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
                   </div>
-                  <h3 className={clsx("text-xl font-bold mb-3", accent.text)}>
-                    {card.title}
-                  </h3>
-                  <p className="text-slate-400 leading-relaxed">
-                    {card.description}
-                  </p>
                 </div>
               </SectionWrapper>
             );
           })}
         </div>
-      </Container>
+      </div>
     </section>
   );
 }
