@@ -270,6 +270,11 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
       if (data.success) {
         addMessage('system', `✅ Success! Prompt updated to version ${data.versionNumber}`);
         addMessage('system', '💡 Your AI has been trained and leveled up!');
+
+        // Clear conversation after successful training - ready for fresh test
+        setTimeout(() => {
+          clearConversation();
+        }, 2000); // Give user 2 seconds to see success message
       } else {
         addMessage('system', `❌ Failed to apply feedback: ${data.error}`);
       }
