@@ -3,6 +3,7 @@
 import { ClipboardList, Sparkles, Phone, Rocket, ArrowRight } from "lucide-react";
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
 import { steps } from "@/lib/constants/landing-data";
+import { clsx } from "clsx";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   ClipboardList,
@@ -11,74 +12,122 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Rocket,
 };
 
-const stepAccents = [
-  { color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/30", line: "from-indigo-500/50" },
-  { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30", line: "from-violet-500/50" },
-  { color: "text-fuchsia-400", bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/30", line: "from-fuchsia-500/50" },
-  { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", line: "from-emerald-500/50" },
+const stepStyles = [
+  {
+    gradient: "from-indigo-500 to-violet-500",
+    bg: "bg-indigo-50",
+    border: "border-indigo-200",
+    text: "text-indigo-600",
+    iconBg: "bg-indigo-500",
+    ring: "ring-indigo-100",
+    shadow: "shadow-indigo-500/20",
+  },
+  {
+    gradient: "from-violet-500 to-purple-500",
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    text: "text-violet-600",
+    iconBg: "bg-violet-500",
+    ring: "ring-violet-100",
+    shadow: "shadow-violet-500/20",
+  },
+  {
+    gradient: "from-fuchsia-500 to-pink-500",
+    bg: "bg-fuchsia-50",
+    border: "border-fuchsia-200",
+    text: "text-fuchsia-600",
+    iconBg: "bg-fuchsia-500",
+    ring: "ring-fuchsia-100",
+    shadow: "shadow-fuchsia-500/20",
+  },
+  {
+    gradient: "from-emerald-500 to-teal-500",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    text: "text-emerald-600",
+    iconBg: "bg-emerald-500",
+    ring: "ring-emerald-100",
+    shadow: "shadow-emerald-500/20",
+  },
 ];
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="relative py-28 lg:py-36 bg-black overflow-hidden">
-      {/* Gradient line at top */}
-      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+    <section id="how-it-works" className="relative py-28 lg:py-36 bg-slate-50 overflow-hidden">
+      {/* Subtle dot grid */}
+      <div className="absolute inset-0 dot-grid-light" />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
           <div className="max-w-2xl mx-auto text-center mb-20">
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
-              From Zero to Live
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 mb-6">
+              <Rocket className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-xs font-semibold text-indigo-600 tracking-wide">
+                How It Works
+              </span>
+            </div>
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.05]">
+              From Blank Form to
               <br />
-              <span className="gradient-text">in 4 Steps</span>
+              <span className="gradient-text-dark">Live AI Agent</span>
             </h2>
-            <p className="mt-6 text-lg text-white/40">
-              No technical knowledge required. Seriously.
+            <p className="mt-6 text-lg text-slate-500">
+              No developers. No prompt engineering. Just describe your business and go.
             </p>
           </div>
         </SectionWrapper>
 
-        {/* Steps — vertical layout on all sizes, connected by line */}
-        <div className="relative">
-          {/* Vertical connecting line */}
-          <div className="absolute left-6 sm:left-8 top-0 bottom-0 w-px bg-gradient-to-b from-indigo-500/30 via-violet-500/20 to-emerald-500/30" />
+        {/* Steps — horizontal cards on desktop, vertical on mobile */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {steps.map((step, index) => {
+            const Icon = iconMap[step.icon];
+            const style = stepStyles[index];
 
-          <div className="space-y-2">
-            {steps.map((step, index) => {
-              const Icon = iconMap[step.icon];
-              const accent = stepAccents[index];
-
-              return (
-                <SectionWrapper key={step.number} delay={0.12 * index}>
-                  <div className="relative flex gap-6 sm:gap-8 group">
-                    {/* Step number node */}
-                    <div className="relative z-10 flex-shrink-0">
-                      <div
-                        className={`w-12 h-12 sm:w-16 sm:h-16 rounded-2xl ${accent.bg} border ${accent.border} flex items-center justify-center transition-all duration-300 group-hover:scale-110`}
-                      >
-                        <span className={`text-lg sm:text-xl font-bold ${accent.color}`}>
-                          {step.number}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 pb-12 last:pb-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        {Icon && <Icon className={`w-4 h-4 ${accent.color} opacity-60`} />}
-                        <h3 className="text-lg sm:text-xl font-bold text-white">
-                          {step.title}
-                        </h3>
-                      </div>
-                      <p className="text-white/40 leading-relaxed max-w-md">
-                        {step.description}
-                      </p>
-                    </div>
+            return (
+              <SectionWrapper key={step.number} delay={0.12 * index} className="h-full">
+                <div
+                  className={clsx(
+                    "group relative rounded-2xl border bg-white p-8 transition-all duration-500 hover:shadow-xl hover:-translate-y-1 text-center h-full",
+                    style.border
+                  )}
+                >
+                  {/* Step number */}
+                  <div
+                    className={clsx(
+                      "w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg ring-4 transition-all duration-300 group-hover:scale-110",
+                      style.iconBg,
+                      style.ring,
+                      style.shadow
+                    )}
+                  >
+                    <span className="text-lg font-bold text-white">{step.number}</span>
                   </div>
-                </SectionWrapper>
-              );
-            })}
-          </div>
+
+                  {/* Icon */}
+                  {Icon && (
+                    <div className={clsx("inline-flex p-2 rounded-lg mb-4", style.bg)}>
+                      <Icon className={clsx("w-5 h-5", style.text)} />
+                    </div>
+                  )}
+
+                  {/* Title */}
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">{step.title}</h3>
+
+                  {/* Description */}
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    {step.description}
+                  </p>
+
+                  {/* Connector arrow (hidden on last, shown on lg) */}
+                  {index < steps.length - 1 && (
+                    <div className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white border border-slate-200 items-center justify-center shadow-sm">
+                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                    </div>
+                  )}
+                </div>
+              </SectionWrapper>
+            );
+          })}
         </div>
 
         {/* CTA */}
@@ -86,9 +135,9 @@ export function HowItWorks() {
           <div className="mt-16 text-center">
             <a
               href="/agents"
-              className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-white text-slate-900 font-semibold text-[15px] hover:bg-white/90 transition-all duration-300 shadow-xl shadow-white/10"
+              className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-slate-900 text-white font-semibold text-[15px] hover:bg-slate-800 transition-all duration-300 shadow-xl shadow-slate-900/20"
             >
-              Start Step 1 Now
+              Build My Agent Now
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </a>
           </div>

@@ -42,7 +42,9 @@ async function handleCallStarted(
       agent_id: agentId,
       from_number: (callData.from_number as string) ?? null,
       to_number: (callData.to_number as string) ?? null,
-      started_at: (callData.start_timestamp as string) ?? new Date().toISOString(),
+      started_at: callData.start_timestamp
+        ? new Date(callData.start_timestamp as number).toISOString()
+        : new Date().toISOString(),
       call_status: "in_progress" as const,
     };
 

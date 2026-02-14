@@ -12,6 +12,8 @@ export async function POST(
     const { voiceId, modelId } = await request.json();
     const { agentId } = await params;
 
+    console.log(`[test/voice] Received request - voiceId: ${voiceId}, modelId: ${modelId}, agentId: ${agentId}`);
+
     // Get agent and current prompt from database
     const supabase = createServiceClient();
     const { data: agent, error: agentError } = await supabase
@@ -116,7 +118,7 @@ export async function POST(
 
     const agentConfig: any = {
       agent_name: agent.business_name,
-      voice_id: voiceId || '11labs-Adrian',
+      voice_id: voiceId || '11labs-Cimo',
       language: 'en-US',
       webhook_url: `${appUrl}/api/webhooks/retell/call-events`,
       response_engine: {
@@ -125,12 +127,15 @@ export async function POST(
       }
     };
 
+    console.log(`[test/voice] Updating Retell agent ${retellAgentId} with voice: ${agentConfig.voice_id}`);
+
     if (retellAgentId) {
       // Update existing agent
       try {
-        await retell.agent.update(retellAgentId, agentConfig);
+        const updateResult = await retell.agent.update(retellAgentId, agentConfig);
+        console.log(`[test/voice] ✅ Retell agent updated successfully`);
       } catch (updateError) {
-        console.error('Failed to update Retell agent:', updateError);
+        console.error('[test/voice] ❌ Failed to update Retell agent:', updateError);
         // Create new one if update fails
         const newAgent = await retell.agent.create(agentConfig);
         retellAgentId = newAgent.agent_id;
@@ -151,6 +156,17 @@ export async function POST(
         .from('agents')
         .update({ retell_agent_id: retellAgentId })
         .eq('id', agentId);
+    }
+
+    // Verify the update worked
+    try {
+      const verifiedAgent = await retell.agent.retrieve(retellAgentId);
+      console.log(`[test/voice] 🔍 Verified Retell agent voice is now: ${verifiedAgent.voice_id}`);
+      if (verifiedAgent.voice_id !== agentConfig.voice_id) {
+        console.error(`[test/voice] ⚠️ WARNING: Voice mismatch! Expected ${agentConfig.voice_id}, got ${verifiedAgent.voice_id}`);
+      }
+    } catch (verifyError) {
+      console.error('[test/voice] Failed to verify agent update:', verifyError);
     }
 
     // Get current user for metadata

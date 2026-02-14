@@ -24,6 +24,8 @@ export interface Testimonial {
   metric?: string;
   rating: number;
   isVideo?: boolean;
+  date?: string;
+  avatarGradient?: string;
 }
 
 export interface FAQItem {
@@ -84,6 +86,28 @@ export interface SecurityFeature {
 export interface FooterColumn {
   title: string;
   links: { label: string; href: string }[];
+}
+
+export interface QuizOption {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  accentColor: string;
+}
+
+export interface QuizStep {
+  id: string;
+  question: string;
+  subtitle: string;
+  options: QuizOption[];
+}
+
+export interface QuizResult {
+  headline: string;
+  description: string;
+  discount: string;
+  cta: { label: string; href: string };
 }
 
 export interface AgentPersona {

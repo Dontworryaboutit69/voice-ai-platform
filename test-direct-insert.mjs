@@ -1,37 +1,61 @@
-// Test if we can insert directly with the service role key
 import { createClient } from '@supabase/supabase-js';
+import { readFileSync } from 'fs';
 
-const supabaseUrl = 'https://qoendwnzpsmztgonrxzq.supabase.co';
-const serviceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvZW5kd256cHNtenRnb25yeHpxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDk1NDEzMCwiZXhwIjoyMDg2NTMwMTMwfQ.98ObnIbcDcfFpc5UTVwDbzk87l60-00IwsMcco9_ryE';
-
-const supabase = createClient(supabaseUrl, serviceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
+const envContent = readFileSync('.env.local', 'utf8');
+const envVars = {};
+envContent.split('\n').forEach(line => {
+  const match = line.match(/^([^=]+)=(.*)$/);
+  if (match) envVars[match[1]] = match[2];
 });
 
-console.log('Testing direct insert with service role key...');
+const supabase = createClient(
+  envVars.NEXT_PUBLIC_SUPABASE_URL,
+  envVars.SUPABASE_SERVICE_ROLE_KEY
+);
 
-const testData = {
-  retell_call_id: `direct_insert_test_${Date.now()}`,
-  agent_id: 'f02fd2dc-32d7-42b8-8378-126d354798f7',
-  from_number: '+15555551234',
-  to_number: '+15555555678',
-  started_at: new Date().toISOString(),
-  call_status: 'in_progress'
+const dentalAgentId = 'f02fd2dc-32d7-42b8-8378-126d354798f7';
+
+console.log('\n🧪 Testing direct insert...\n');
+
+const testCallData = {
+  retell_call_id: 'call_ef22574922e3fd61e8905d9a4a3',
+  agent_id: dentalAgentId,
+  from_number: '+1234567890',
+  to_number: '+0987654321',
+  started_at: '2026-02-14T06:20:51.184Z',
+  ended_at: '2026-02-14T06:21:34.240Z',
+  duration_ms: 43056,
+  transcript: 'Test transcript',
+  transcript_object: null,
+  recording_url: 'https://example.com/recording.mp3',
+  call_status: 'completed',
+  call_analysis: null
 };
-
-console.log('Data to insert:', testData);
 
 const { data, error } = await supabase
   .from('calls')
-  .insert(testData);
+  .insert(testCallData);
 
 if (error) {
-  console.log('\n❌ INSERT FAILED');
-  console.log('Error:', error);
+  console.log('❌ Insert error:', error);
 } else {
-  console.log('\n✅ INSERT SUCCEEDED');
-  console.log('Data:', data);
+  console.log('✅ Insert successful:', data);
+}
+
+// Check if it's there
+const { data: checkData } = await supabase
+  .from('calls')
+  .select('*')
+  .eq('retell_call_id', 'call_ef22574922e3fd61e8905d9a4a3')
+  .single();
+
+console.log('\n📋 Call in database:', checkData ? 'YES' : 'NO');
+
+// Clean up
+if (checkData) {
+  await supabase
+    .from('calls')
+    .delete()
+    .eq('retell_call_id', 'call_ef22574922e3fd61e8905d9a4a3');
+  console.log('🧹 Cleaned up test record');
 }

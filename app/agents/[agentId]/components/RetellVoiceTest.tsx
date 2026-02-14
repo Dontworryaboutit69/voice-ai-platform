@@ -10,29 +10,24 @@ interface Message {
 }
 
 const VOICE_OPTIONS = [
-  { id: '11labs-Adrian', name: 'Adrian', description: 'Male, Confident (Default)' },
-  { id: '11labs-Sarah', name: 'Sarah', description: 'Female, Professional' },
-  { id: 'openai-Alloy', name: 'Alloy', description: 'Neutral, Clear' },
-  { id: 'openai-Shimmer', name: 'Shimmer', description: 'Female, Warm' }
+  { id: '11labs-Cimo', name: 'Cimo', description: 'Female, Professional (Default)' },
+  { id: '11labs-Lily', name: 'Lily', description: 'Female, Warm' },
+  { id: '11labs-Billy', name: 'Billy', description: 'Male, Confident' },
+  { id: '11labs-Marissa', name: 'Marissa', description: 'Female, Professional' },
+  { id: '11labs-Jenny', name: 'Jenny', description: 'Female, Friendly' },
+  { id: '11labs-Lucas', name: 'Lucas', description: 'Male, Clear' },
+  { id: 'openai-Nova', name: 'Nova', description: 'Female, Versatile' },
+  { id: 'cartesia-Brian', name: 'Brian', description: 'Male, Conversational' },
+  { id: 'cartesia-Emily', name: 'Emily', description: 'Female, Natural' }
 ];
 
 const MODEL_OPTIONS = [
-  // GPT 5.2
-  { id: 'gpt-5.2', name: 'GPT-5.2', description: 'Default' },
-  { id: 'gpt-5.2-fast', name: 'GPT-5.2', description: 'Fast Tier' },
-
-  // GPT 5.1
-  { id: 'gpt-5.1', name: 'GPT-5.1', description: 'Default' },
-  { id: 'gpt-5.1-fast', name: 'GPT-5.1', description: 'Fast Tier' },
-
-  // GPT 5
-  { id: 'gpt-5', name: 'GPT-5', description: 'Default' },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini', description: 'Fast' },
-  { id: 'gpt-5-nano', name: 'GPT-5 Nano', description: 'Fastest' },
-
-  // GPT 4.1
-  { id: 'gpt-4.1', name: 'GPT-4.1', description: 'Default' },
-  { id: 'gpt-4.1-fast', name: 'GPT-4.1', description: 'Fast' }
+  { id: 'gpt-5.2', name: 'GPT-5.2', description: 'Best (Default)' },
+  { id: 'gpt-5.1', name: 'GPT-5.1', description: 'Advanced' },
+  { id: 'gpt-5', name: 'GPT-5', description: 'Standard' },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Fast' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', description: 'Balanced' },
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: 'Fastest' }
 ];
 
 export default function RetellVoiceTest({ agentId }: { agentId: string }) {
@@ -44,7 +39,7 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
   const [feedbackInput, setFeedbackInput] = useState('');
   const [isProcessingFeedback, setIsProcessingFeedback] = useState(false);
   const [textInput, setTextInput] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState('11labs-Adrian');
+  const [selectedVoice, setSelectedVoice] = useState('11labs-Cimo');
   const [selectedModel, setSelectedModel] = useState('gpt-5.2');
   const [callDuration, setCallDuration] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -85,22 +80,25 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
       addMessage('system', `📴 Call ended${duration}`);
 
       // Auto-sync call from Retell (workaround for webhook not firing)
+      // Wait 2 seconds to give Retell time to process the call completion
       addMessage('system', '🔄 Syncing call to database...');
-      try {
-        const response = await fetch(`/api/webhooks/retell/sync-calls`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentId })
-        });
-        const data = await response.json();
-        if (data.success) {
-          addMessage('system', `✅ Call saved! Check the Call History tab to see this conversation.`);
-        } else {
-          console.error('Sync failed:', data.error);
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/webhooks/retell/sync-calls`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId })
+          });
+          const data = await response.json();
+          if (data.success) {
+            addMessage('system', `✅ Call saved! Check the Call History tab to see this conversation.`);
+          } else {
+            console.error('Sync failed:', data.error);
+          }
+        } catch (error) {
+          console.error('Error syncing call:', error);
         }
-      } catch (error) {
-        console.error('Error syncing call:', error);
-      }
+      }, 2000);
     });
 
     retellClient.current.on('agent_start_talking', () => {

@@ -4,8 +4,8 @@ import { ProblemSection } from "@/components/landing/ProblemSection";
 import { SolutionFeatures } from "@/components/landing/SolutionFeatures";
 import { AgentShowcase } from "@/components/landing/AgentShowcase";
 import { HowItWorks } from "@/components/landing/HowItWorks";
-import { DemoPreview } from "@/components/landing/DemoPreview";
 import { ComparisonTable } from "@/components/landing/ComparisonTable";
+import { QuizFunnel } from "@/components/landing/QuizFunnel";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { StatsCredibility } from "@/components/landing/StatsCredibility";
 import { IntegrationsGrid } from "@/components/landing/IntegrationsGrid";
@@ -23,8 +23,8 @@ export default function HomePage() {
       <SolutionFeatures />
       <AgentShowcase />
       <HowItWorks />
-      <DemoPreview />
       <ComparisonTable />
+      <QuizFunnel />
       <Testimonials />
       <StatsCredibility />
       <IntegrationsGrid />

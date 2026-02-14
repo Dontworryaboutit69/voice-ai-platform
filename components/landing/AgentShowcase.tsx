@@ -61,7 +61,6 @@ function AudioPlayer({ agent }: { agent: AgentPersona }) {
 
   const togglePlay = () => {
     if (!agent.audioUrl) {
-      // Demo mode — simulate playback
       setIsPlaying(!isPlaying);
       return;
     }
@@ -94,7 +93,6 @@ function AudioPlayer({ agent }: { agent: AgentPersona }) {
       )}
 
       <div className="flex items-center gap-3">
-        {/* Play button */}
         <button
           onClick={togglePlay}
           className={clsx(
@@ -111,7 +109,6 @@ function AudioPlayer({ agent }: { agent: AgentPersona }) {
           )}
         </button>
 
-        {/* Waveform visualization */}
         <div className="flex-1 flex items-center gap-[2px] h-8">
           {Array.from({ length: 32 }).map((_, i) => {
             const height = Math.sin(i * 0.5 + 1) * 0.5 + 0.3 + Math.random() * 0.2;
@@ -132,7 +129,6 @@ function AudioPlayer({ agent }: { agent: AgentPersona }) {
           })}
         </div>
 
-        {/* Volume icon */}
         <Volume2 className={clsx("w-4 h-4 flex-shrink-0", isPlaying ? "text-white/60" : "text-white/20")} />
       </div>
 
@@ -151,7 +147,7 @@ function AgentCard({ agent, isSelected, onClick }: { agent: AgentPersona; isSele
     <motion.button
       onClick={onClick}
       className={clsx(
-        "relative w-full text-left rounded-2xl border p-6 transition-all duration-500 cursor-pointer",
+        "relative w-full text-left rounded-2xl border p-5 transition-all duration-500 cursor-pointer",
         isSelected
           ? `${accent.border} bg-gradient-to-b from-white/10 to-white/5 shadow-lg ${accent.glow}`
           : "border-white/10 bg-white/5 hover:border-white/15 hover:bg-white/10"
@@ -159,41 +155,30 @@ function AgentCard({ agent, isSelected, onClick }: { agent: AgentPersona; isSele
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-      {/* Avatar */}
-      <div className="flex items-start gap-4 mb-4">
+      <div className="flex items-center gap-4">
         <div
           className={clsx(
-            "flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-2xl shadow-lg transition-all duration-300",
+            "flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-xl shadow-lg transition-all duration-300",
             agent.avatarGradient,
             isSelected && `ring-2 ${accent.ring}`
           )}
         >
           {agent.avatarEmoji}
         </div>
-        <div className="min-w-0">
-          <h3 className="text-lg font-bold text-white">{agent.name}</h3>
-          <p className={clsx("text-sm font-medium", accent.text)}>{agent.role}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-bold text-white leading-tight">{agent.name}</h3>
+          <p className={clsx("text-xs font-medium", accent.text)}>{agent.role}</p>
         </div>
-      </div>
-
-      {/* Industry badge */}
-      <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-3">
-        <span className="text-[11px] font-medium text-white/40">{agent.industry}</span>
-      </div>
-
-      {/* Description */}
-      <p className="text-sm text-white/40 leading-relaxed mb-4">{agent.description}</p>
-
-      {/* Stat */}
-      <div className="flex items-center justify-between pt-4 border-t border-white/5">
-        <span className="text-xs text-white/30">{agent.stats.label}</span>
-        <span className={clsx("text-sm font-bold", accent.text)}>{agent.stats.value}</span>
+        <div className="hidden sm:block text-right flex-shrink-0">
+          <span className={clsx("text-sm font-bold", accent.text)}>{agent.stats.value}</span>
+          <p className="text-[10px] text-white/30">{agent.stats.label}</p>
+        </div>
       </div>
 
       {/* Selection indicator */}
       {isSelected && (
         <motion.div
-          className={clsx("absolute top-3 right-3 w-2 h-2 rounded-full", accent.text.replace("text-", "bg-"))}
+          className={clsx("absolute top-2 right-2 w-2 h-2 rounded-full", accent.text.replace("text-", "bg-"))}
           layoutId="agent-indicator"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -214,7 +199,7 @@ export function AgentShowcase() {
       {/* Gradient line top */}
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      {/* Ambient glow — shifts color based on selection */}
+      {/* Ambient glow */}
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] rounded-full blur-[200px] transition-colors duration-1000 opacity-20"
         style={{
@@ -229,7 +214,7 @@ export function AgentShowcase() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
-          <div className="text-center max-w-2xl mx-auto mb-20">
+          <div className="text-center max-w-2xl mx-auto mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 bg-white/5 mb-6">
               <Volume2 className="w-3.5 h-3.5 text-white/40" />
               <span className="text-xs font-medium text-white/40 tracking-wide">
@@ -248,95 +233,86 @@ export function AgentShowcase() {
           </div>
         </SectionWrapper>
 
-        {/* Two-column layout: cards grid + featured preview */}
-        <div className="grid lg:grid-cols-5 gap-6 lg:gap-8">
-          {/* Left: Agent cards grid */}
-          <div className="lg:col-span-3">
-            <div className="grid sm:grid-cols-2 gap-4">
-              {agentPersonas.map((agent, index) => (
-                <SectionWrapper key={agent.id} delay={0.06 * index}>
-                  <AgentCard
-                    agent={agent}
-                    isSelected={selectedId === agent.id}
-                    onClick={() => setSelectedId(agent.id)}
-                  />
-                </SectionWrapper>
-              ))}
-            </div>
-          </div>
+        {/* Agent cards — 3-col even grid */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+          {agentPersonas.map((agent, index) => (
+            <SectionWrapper key={agent.id} delay={0.06 * index}>
+              <AgentCard
+                agent={agent}
+                isSelected={selectedId === agent.id}
+                onClick={() => setSelectedId(agent.id)}
+              />
+            </SectionWrapper>
+          ))}
+        </div>
 
-          {/* Right: Featured agent detail + audio */}
-          <div className="lg:col-span-2">
-            <SectionWrapper delay={0.2}>
-              <div className="sticky top-32">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={selectedAgent.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
+        {/* Featured agent detail — full-width bottom panel */}
+        <SectionWrapper delay={0.2}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedAgent.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
+              className={clsx(
+                "rounded-2xl border p-6 sm:p-8 bg-gradient-to-b from-white/10 to-white/5",
+                accent.border
+              )}
+            >
+              <div className="grid md:grid-cols-2 gap-8 items-center">
+                {/* Left — Agent info */}
+                <div className="flex items-start gap-5">
+                  <div
                     className={clsx(
-                      "rounded-2xl border p-8 bg-gradient-to-b from-white/10 to-white/5",
-                      accent.border
+                      "flex-shrink-0 w-20 h-20 rounded-2xl bg-gradient-to-br flex items-center justify-center text-4xl shadow-2xl ring-2",
+                      selectedAgent.avatarGradient,
+                      accent.ring
                     )}
                   >
-                    {/* Large avatar */}
-                    <div className="flex flex-col items-center text-center mb-8">
-                      <div
-                        className={clsx(
-                          "w-24 h-24 rounded-3xl bg-gradient-to-br flex items-center justify-center text-5xl shadow-2xl mb-5 ring-2",
-                          selectedAgent.avatarGradient,
-                          accent.ring
-                        )}
-                      >
-                        {selectedAgent.avatarEmoji}
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-1">
-                        {selectedAgent.name}
-                      </h3>
-                      <p className={clsx("text-sm font-medium mb-2", accent.text)}>
-                        {selectedAgent.role}
-                      </p>
-                      <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/5 border border-white/10">
-                        <span className="text-[11px] font-medium text-white/40">
-                          {selectedAgent.industry}
-                        </span>
-                      </div>
+                    {selectedAgent.avatarEmoji}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xl font-bold text-white mb-1">
+                      {selectedAgent.name}
+                    </h3>
+                    <p className={clsx("text-sm font-medium mb-1", accent.text)}>
+                      {selectedAgent.role}
+                    </p>
+                    <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 mb-3">
+                      <span className="text-[10px] font-medium text-white/40">
+                        {selectedAgent.industry}
+                      </span>
                     </div>
-
-                    {/* Description */}
-                    <p className="text-sm text-white/50 leading-relaxed text-center mb-6">
+                    <p className="text-sm text-white/50 leading-relaxed">
                       {selectedAgent.description}
                     </p>
-
-                    {/* Stat highlight */}
-                    <div className="flex items-center justify-center gap-2 mb-8">
-                      <span className={clsx("text-3xl font-extrabold", accent.text)}>
+                    <div className="flex items-center gap-2 mt-3">
+                      <span className={clsx("text-2xl font-extrabold", accent.text)}>
                         {selectedAgent.stats.value}
                       </span>
-                      <span className="text-sm text-white/30">
+                      <span className="text-xs text-white/30">
                         {selectedAgent.stats.label}
                       </span>
                     </div>
+                  </div>
+                </div>
 
-                    {/* Audio player */}
-                    <AudioPlayer agent={selectedAgent} />
-
-                    {/* CTA */}
-                    <a
-                      href="/agents"
-                      className="group flex items-center justify-center gap-2 w-full mt-6 py-3.5 rounded-xl bg-white text-slate-900 font-semibold text-sm hover:bg-white/90 transition-all duration-300 shadow-lg shadow-white/10"
-                    >
-                      Build an Agent Like {selectedAgent.name}
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                    </a>
-                  </motion.div>
-                </AnimatePresence>
+                {/* Right — Audio + CTA */}
+                <div className="space-y-4">
+                  <AudioPlayer agent={selectedAgent} />
+                  <a
+                    href="/agents"
+                    className="group flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-white text-slate-900 font-semibold text-sm hover:bg-white/90 transition-all duration-300 shadow-lg shadow-white/10"
+                  >
+                    Build an Agent Like {selectedAgent.name}
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </a>
+                </div>
               </div>
-            </SectionWrapper>
-          </div>
-        </div>
+            </motion.div>
+          </AnimatePresence>
+        </SectionWrapper>
       </div>
     </section>
   );

@@ -3,7 +3,6 @@
 import {
   Calendar,
   BarChart3,
-  Phone,
   Mic,
   Zap,
   Building2,
@@ -27,63 +26,145 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Zapier: Zap,
 };
 
+/* Each integration has brand-accurate colors */
+const brandStyles: Record<string, { bg: string; iconColor: string; border: string; letter: string; letterBg: string }> = {
+  "Google Calendar": {
+    bg: "bg-blue-50",
+    iconColor: "text-blue-600",
+    border: "border-blue-200",
+    letter: "G",
+    letterBg: "bg-gradient-to-br from-blue-500 via-red-500 to-yellow-400",
+  },
+  GoHighLevel: {
+    bg: "bg-orange-50",
+    iconColor: "text-orange-600",
+    border: "border-orange-200",
+    letter: "GHL",
+    letterBg: "bg-gradient-to-br from-orange-500 to-orange-600",
+  },
+  Calendly: {
+    bg: "bg-blue-50",
+    iconColor: "text-blue-500",
+    border: "border-blue-200",
+    letter: "C",
+    letterBg: "bg-gradient-to-br from-blue-400 to-blue-600",
+  },
+  Twilio: {
+    bg: "bg-red-50",
+    iconColor: "text-red-600",
+    border: "border-red-200",
+    letter: "T",
+    letterBg: "bg-gradient-to-br from-red-500 to-red-600",
+  },
+  ElevenLabs: {
+    bg: "bg-slate-50",
+    iconColor: "text-slate-800",
+    border: "border-slate-300",
+    letter: "XI",
+    letterBg: "bg-gradient-to-br from-slate-700 to-slate-900",
+  },
+  "Retell AI": {
+    bg: "bg-violet-50",
+    iconColor: "text-violet-600",
+    border: "border-violet-200",
+    letter: "R",
+    letterBg: "bg-gradient-to-br from-violet-500 to-violet-700",
+  },
+  Salesforce: {
+    bg: "bg-sky-50",
+    iconColor: "text-sky-600",
+    border: "border-sky-200",
+    letter: "SF",
+    letterBg: "bg-gradient-to-br from-sky-400 to-sky-600",
+  },
+  HubSpot: {
+    bg: "bg-orange-50",
+    iconColor: "text-orange-500",
+    border: "border-orange-200",
+    letter: "HS",
+    letterBg: "bg-gradient-to-br from-orange-400 to-orange-600",
+  },
+  Zapier: {
+    bg: "bg-amber-50",
+    iconColor: "text-amber-600",
+    border: "border-amber-200",
+    letter: "Z",
+    letterBg: "bg-gradient-to-br from-amber-400 to-orange-500",
+  },
+};
+
+const defaultBrand = {
+  bg: "bg-slate-50",
+  iconColor: "text-slate-500",
+  border: "border-slate-200",
+  letter: "?",
+  letterBg: "bg-slate-400",
+};
+
 export function IntegrationsGrid() {
   return (
-    <section id="integrations" className="relative py-28 lg:py-36 bg-black overflow-hidden">
-      {/* Gradient line */}
-      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
+    <section id="integrations" className="relative py-28 lg:py-36 bg-slate-50 overflow-hidden">
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
         <SectionWrapper>
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.05]">
               Connects to Your
               <br />
-              <span className="gradient-text">Favorite Tools</span>
+              <span className="gradient-text-dark">Favorite Tools</span>
             </h2>
-            <p className="mt-6 text-lg text-white/40">
+            <p className="mt-6 text-lg text-slate-500">
               Seamless integrations with the tools you already use.
             </p>
           </div>
         </SectionWrapper>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 max-w-3xl mx-auto">
           {integrations.map((integration, index) => {
             const Icon = iconMap[integration.name] || Zap;
+            const brand = brandStyles[integration.name] || defaultBrand;
             const isComingSoon = integration.status === "coming_soon";
 
             return (
-              <SectionWrapper key={integration.id} delay={0.05 * index}>
+              <SectionWrapper key={integration.id} delay={0.06 * index}>
                 <div
                   className={clsx(
-                    "relative rounded-xl border p-6 text-center transition-all duration-300",
+                    "group relative rounded-2xl border p-6 text-center transition-all duration-300 bg-white",
                     isComingSoon
-                      ? "border-white/5 bg-white/5 opacity-50"
-                      : "border-white/10 bg-white/5 hover:border-white/15 hover:bg-white/10"
+                      ? "border-slate-200 opacity-60"
+                      : `${brand.border} hover:shadow-xl hover:-translate-y-1`
                   )}
                 >
+                  {/* Brand logo mark */}
                   <div
                     className={clsx(
-                      "w-10 h-10 rounded-lg mx-auto mb-3 flex items-center justify-center",
-                      isComingSoon ? "bg-white/5" : "bg-white/5"
+                      "w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg transition-transform duration-300",
+                      !isComingSoon && "group-hover:scale-110",
+                      isComingSoon ? "bg-slate-200" : brand.letterBg
                     )}
                   >
-                    <Icon
-                      className={clsx(
-                        "w-5 h-5",
-                        isComingSoon ? "text-white/20" : "text-white/50"
-                      )}
-                    />
+                    <span className="text-white font-extrabold text-sm tracking-tight">
+                      {brand.letter}
+                    </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-white/70 mb-0.5">
+
+                  {/* Name */}
+                  <h3 className="text-sm font-bold text-slate-800 mb-1">
                     {integration.name}
                   </h3>
-                  <p className="text-[11px] text-white/30">
+
+                  {/* Description */}
+                  <p className="text-[12px] text-slate-400 leading-relaxed">
                     {integration.description}
                   </p>
-                  {isComingSoon && (
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-white/5 text-white/30 text-[9px] font-semibold uppercase tracking-wider">
+
+                  {/* Status badge */}
+                  {isComingSoon ? (
+                    <span className="inline-block mt-3 px-3 py-1 rounded-full bg-slate-100 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                       Coming Soon
+                    </span>
+                  ) : (
+                    <span className="inline-block mt-3 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
+                      Connected
                     </span>
                   )}
                 </div>

@@ -8,10 +8,12 @@ import type { FAQItem } from "@/lib/types/landing";
 
 interface AccordionProps {
   items: FAQItem[];
+  variant?: "dark" | "light";
 }
 
-export function Accordion({ items }: AccordionProps) {
+export function Accordion({ items, variant = "dark" }: AccordionProps) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const isLight = variant === "light";
 
   return (
     <div className="space-y-2">
@@ -22,16 +24,25 @@ export function Accordion({ items }: AccordionProps) {
             key={item.id}
             className={clsx(
               "rounded-xl border transition-all duration-300",
-              isOpen
-                ? "border-white/15 bg-white/5"
-                : "border-white/10 bg-white/5 hover:border-white/10"
+              isLight
+                ? isOpen
+                  ? "border-slate-300 bg-white shadow-md"
+                  : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                : isOpen
+                  ? "border-white/15 bg-white/5"
+                  : "border-white/10 bg-white/5 hover:border-white/10"
             )}
           >
             <button
               onClick={() => setOpenId(isOpen ? null : item.id)}
               className="flex w-full items-center justify-between px-6 py-5 text-left cursor-pointer"
             >
-              <span className="text-[15px] font-semibold text-white/80 pr-4">
+              <span
+                className={clsx(
+                  "text-[15px] font-semibold pr-4",
+                  isLight ? "text-slate-800" : "text-white/80"
+                )}
+              >
                 {item.question}
               </span>
               <motion.span
@@ -39,7 +50,12 @@ export function Accordion({ items }: AccordionProps) {
                 transition={{ duration: 0.3 }}
                 className="flex-shrink-0"
               >
-                <ChevronDown className="w-4 h-4 text-white/30" />
+                <ChevronDown
+                  className={clsx(
+                    "w-4 h-4",
+                    isLight ? "text-slate-400" : "text-white/30"
+                  )}
+                />
               </motion.span>
             </button>
 
@@ -52,7 +68,12 @@ export function Accordion({ items }: AccordionProps) {
                   transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-6 pb-5 text-white/40 leading-relaxed text-[15px]">
+                  <div
+                    className={clsx(
+                      "px-6 pb-5 leading-relaxed text-[15px]",
+                      isLight ? "text-slate-500" : "text-white/40"
+                    )}
+                  >
                     {item.answer}
                   </div>
                 </motion.div>

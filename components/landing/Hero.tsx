@@ -39,9 +39,9 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.1 }}
           className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight leading-[0.95]"
         >
-          <span className="text-white">Voice AI That</span>
+          <span className="text-white">The First Voice AI</span>
           <br />
-          <span className="gradient-text">Sounds Human</span>
+          <span className="gradient-text">That Learns on Its Own</span>
         </motion.h1>
 
         {/* Sub */}
@@ -51,8 +51,9 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.2 }}
           className="mt-8 text-lg sm:text-xl text-white/50 max-w-2xl mx-auto leading-relaxed font-light"
         >
-          We built 60+ voice AI agents at $5k–$20k each.
-          Now the entire platform is yours — <span className="text-white/80 font-normal">free to start</span>.
+          Converts at 85% of a top human rep at 3% of the cost. Custom prompts.
+          Thousands of voices. Self-improving from every call. The same quality agencies
+          charge <span className="text-white/80 font-normal">$5k&ndash;$20k</span> for&mdash;start free.
         </motion.p>
 
         {/* CTAs */}
@@ -66,15 +67,15 @@ export function Hero() {
             href="/agents"
             className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-white text-slate-900 font-semibold text-[15px] hover:bg-white/90 transition-all duration-300 shadow-xl shadow-white/10"
           >
-            Start Building Free
+            Get Started Free
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </a>
           <a
-            href="#demo"
+            href="#agents"
             className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl border border-white/10 text-white/70 font-medium text-[15px] hover:bg-white/5 hover:text-white transition-all duration-300"
           >
             <Play className="w-4 h-4" />
-            Watch Demo
+            Meet the Agents
           </a>
         </motion.div>
 
@@ -85,7 +86,7 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.5 }}
           className="mt-12 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-white/40"
         >
-          {["No coding required", "Free to start", "Live in 5 min"].map((t) => (
+          {["85% human conversion rate", "20 concurrent calls", "Live in 5 minutes"].map((t) => (
             <span key={t} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-emerald-400/70" />
               {t}

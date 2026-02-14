@@ -1502,11 +1502,11 @@ export default function AgentDashboard() {
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 text-xs font-bold rounded-full ${
-                                call.call_status === 'completed' ? 'bg-green-100 text-green-700' :
+                                call.call_status === 'completed' || call.call_status === 'ongoing' ? 'bg-green-100 text-green-700' :
                                 call.call_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
                                 'bg-red-100 text-red-700'
                               }`}>
-                                {call.call_status || 'Unknown'}
+                                {call.call_status === 'ongoing' ? 'completed' : call.call_status || 'Unknown'}
                               </span>
                             </td>
                             <td className="px-6 py-4">

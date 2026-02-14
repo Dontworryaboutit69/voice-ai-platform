@@ -7,7 +7,7 @@ const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 // Manual sync endpoint to fetch calls from Retell and sync to database
 export async function POST(request: NextRequest) {
   try {
-    console.log('[sync-calls] Starting sync - version 2.0');
+    console.log('[sync-calls] Starting sync - version 4.0 (fixed timestamp conversion)');
     const { agentId } = await request.json();
 
     if (!agentId) {
@@ -49,9 +49,13 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     let skippedCount = 0;
 
+    console.log(`[sync-calls] Processing ${callsList.length} calls from Retell API`);
+
     // Process each call
     for (const callRaw of callsList) {
       const call = callRaw as any; // Cast to any to work around Retell SDK type issues
+
+      console.log(`[sync-calls] Call ${call.call_id}: agent=${call.agent_id}, status=${call.call_status}, end_timestamp=${call.end_timestamp}`);
 
       // CRITICAL: Filter out calls from other agents
       // Retell's filter_agent_id parameter doesn't work correctly, so we must filter here
@@ -68,15 +72,19 @@ export async function POST(request: NextRequest) {
         .eq('retell_call_id', call.call_id)
         .single();
 
-      // Normalize call status - Retell returns 'ended', 'error', 'completed', 'in_progress'
+      // Normalize call status - Retell returns 'ended', 'error', 'completed', 'in_progress', 'ongoing'
       // We standardize to 'completed' or 'in_progress' for consistency
       let normalizedStatus = call.call_status;
-      if (normalizedStatus === 'ended' || normalizedStatus === 'error') {
+      console.log(`[sync-calls] Call ${call.call_id} - Original status: ${normalizedStatus}`);
+
+      if (normalizedStatus === 'ended' || normalizedStatus === 'error' || normalizedStatus === 'ongoing') {
         // If call has ended (even with error), mark as completed if it has transcript/recording
         normalizedStatus = (call.end_timestamp || call.transcript || call.recording_url) ? 'completed' : 'in_progress';
+        console.log(`[sync-calls] Call ${call.call_id} - Normalized status from ${call.call_status} to ${normalizedStatus}`);
       }
       if (!normalizedStatus) {
         normalizedStatus = call.end_timestamp ? 'completed' : 'in_progress';
+        console.log(`[sync-calls] Call ${call.call_id} - No status, using: ${normalizedStatus}`);
       }
 
       const callData = {
@@ -84,8 +92,8 @@ export async function POST(request: NextRequest) {
         agent_id: agentId,
         from_number: call.from_number || null,
         to_number: call.to_number || null,
-        started_at: call.start_timestamp || new Date().toISOString(),
-        ended_at: call.end_timestamp || null,
+        started_at: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : new Date().toISOString(),
+        ended_at: call.end_timestamp ? new Date(call.end_timestamp).toISOString() : null,
         duration_ms: call.call_duration_ms || call.duration_ms || null,
         transcript: typeof call.transcript === 'string' ? call.transcript : null,
         transcript_object: call.transcript_object || null,
@@ -96,22 +104,30 @@ export async function POST(request: NextRequest) {
 
       if (existingCall) {
         // Update existing call
+        console.log(`[sync-calls] Updating existing call ${call.call_id}`);
         const { error: updateError } = await supabase
           .from('calls')
           .update(callData)
           .eq('id', existingCall.id);
 
-        if (!updateError) {
+        if (updateError) {
+          console.error(`[sync-calls] Update error for ${call.call_id}:`, updateError);
+        } else {
           updatedCount++;
+          console.log(`[sync-calls] Successfully updated call ${call.call_id}`);
         }
       } else {
         // Insert new call
+        console.log(`[sync-calls] Inserting new call ${call.call_id}`);
         const { error: insertError } = await supabase
           .from('calls')
           .insert(callData);
 
-        if (!insertError) {
+        if (insertError) {
+          console.error(`[sync-calls] Insert error for ${call.call_id}:`, insertError);
+        } else {
           syncedCount++;
+          console.log(`[sync-calls] Successfully inserted call ${call.call_id}`);
         }
       }
     }

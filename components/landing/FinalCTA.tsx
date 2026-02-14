@@ -25,13 +25,13 @@ export function FinalCTA() {
         <SectionWrapper>
           <div className="text-center">
             <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
-              Every Missed Call
+              Stop Paying Agency Prices
               <br />
-              <span className="text-white/40">Is a Lost Customer</span>
+              <span className="text-white/40">for What Takes 5 Minutes to Build</span>
             </h2>
             <p className="mt-6 text-xl text-white/40 max-w-xl mx-auto leading-relaxed">
-              Build your agent in 5 minutes. Test it free. No credit card
-              required.
+              Custom prompts. Self-learning AI. Thousands of voices. The same quality
+              that used to cost $5k&ndash;$20k&mdash;free to start.
             </p>
 
             <div className="mt-10">
@@ -39,7 +39,7 @@ export function FinalCTA() {
                 href="/agents"
                 className="group inline-flex items-center gap-3 px-10 py-4.5 rounded-xl bg-white text-slate-900 font-bold text-lg shadow-2xl shadow-white/10 hover:shadow-white/20 hover:scale-[1.02] transition-all duration-300"
               >
-                Start Building Free
+                Get Started Free
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </a>
             </div>
@@ -48,8 +48,8 @@ export function FinalCTA() {
             <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-white/30">
               {[
                 "No credit card required",
-                "Setup in 5 minutes",
-                "Cancel anytime",
+                "Custom-built in 5 minutes",
+                "Self-learning from day one",
               ].map((text) => (
                 <div key={text} className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-emerald-400/60" />

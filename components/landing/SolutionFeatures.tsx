@@ -13,7 +13,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 const miniFeatures = [
   { icon: BarChart3, label: "Real-time Analytics" },
-  { icon: Globe, label: "Multi-language" },
+  { icon: Globe, label: "20 Concurrent Calls" },
   { icon: Link2, label: "CRM Auto-Sync" },
   { icon: Clock, label: "24/7 Availability" },
 ];
@@ -55,12 +55,13 @@ export function SolutionFeatures() {
               </span>
             </div>
             <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.05]">
-              Agency-Grade Agents
+              Not a Template.
               <br />
-              <span className="gradient-text">Zero Complexity</span>
+              <span className="gradient-text">Built For Your Business.</span>
             </h2>
             <p className="mt-6 text-lg text-white/40 max-w-xl mx-auto leading-relaxed">
-              Same quality our agency delivered at $5k–$20k per agent. Now yours in minutes.
+              Every agent gets custom prompts, learns from real calls, and sounds exactly how you want.
+              No cookie-cutter scripts. No technical skills required.
             </p>
           </div>
         </SectionWrapper>
