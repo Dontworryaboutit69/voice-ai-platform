@@ -67,6 +67,17 @@ export async function POST(request: NextRequest) {
         .eq('retell_call_id', call.call_id)
         .single();
 
+      // Normalize call status - Retell returns 'ended', 'error', 'completed', 'in_progress'
+      // We standardize to 'completed' or 'in_progress' for consistency
+      let normalizedStatus = call.call_status;
+      if (normalizedStatus === 'ended' || normalizedStatus === 'error') {
+        // If call has ended (even with error), mark as completed if it has transcript/recording
+        normalizedStatus = (call.end_timestamp || call.transcript || call.recording_url) ? 'completed' : 'in_progress';
+      }
+      if (!normalizedStatus) {
+        normalizedStatus = call.end_timestamp ? 'completed' : 'in_progress';
+      }
+
       const callData = {
         retell_call_id: call.call_id,
         agent_id: agentId,
@@ -78,7 +89,7 @@ export async function POST(request: NextRequest) {
         transcript: typeof call.transcript === 'string' ? call.transcript : null,
         transcript_object: call.transcript_object || null,
         recording_url: call.recording_url || null,
-        call_status: call.call_status || (call.end_timestamp ? 'completed' : 'in_progress'),
+        call_status: normalizedStatus,
         call_analysis: call.call_analysis || null
       };
 
