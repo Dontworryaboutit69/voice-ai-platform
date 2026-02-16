@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
-// Force rebuild - updated for environment variable
+// Force rebuild - env var fixed (removed quotes)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
