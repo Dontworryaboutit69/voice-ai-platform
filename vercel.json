@@ -6,5 +6,11 @@
   "framework": "nextjs",
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://qoendwnzpsmztgonrxzq.supabase.co"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

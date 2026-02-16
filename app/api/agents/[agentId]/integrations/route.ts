@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
+import { IntegrationFactory } from '@/lib/integrations/integration-factory';
 
 // GET - List all integrations for an agent
 export async function GET(
@@ -11,26 +12,32 @@ export async function GET(
     const supabase = createServiceClient();
 
     const { data: integrations, error } = await supabase
-      .from('agent_integrations')
+      .from('integration_connections')
       .select('*')
       .eq('agent_id', agentId)
-      .eq('is_active', true);
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching integrations:', error);
+      console.error('[Integrations API] Error fetching integrations:', error);
       return NextResponse.json(
         { success: false, error: error.message },
         { status: 500 }
       );
     }
 
+    // Add metadata for each integration
+    const integrationsWithMetadata = (integrations || []).map(integration => ({
+      ...integration,
+      metadata: IntegrationFactory.getMetadata(integration.integration_type),
+    }));
+
     return NextResponse.json({
       success: true,
-      integrations: integrations || []
+      integrations: integrationsWithMetadata
     });
 
   } catch (error: any) {
-    console.error('Error in GET /api/agents/[agentId]/integrations:', error);
+    console.error('[Integrations API] Error in GET:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch integrations' },
       { status: 500 }
@@ -45,51 +52,194 @@ export async function POST(
 ) {
   try {
     const { agentId } = await params;
-    const { integrationType, credentials, settings } = await request.json();
+    const body = await request.json();
 
-    if (!integrationType || !credentials) {
+    const {
+      integration_type,
+      api_key,
+      api_secret,
+      webhook_url,
+      config = {},
+    } = body;
+
+    // Validate integration type
+    if (!IntegrationFactory.getAvailableTypes().includes(integration_type)) {
       return NextResponse.json(
-        { success: false, error: 'Integration type and credentials are required' },
+        { success: false, error: 'Invalid integration type' },
+        { status: 400 }
+      );
+    }
+
+    // Validate config
+    const validation = IntegrationFactory.validateConfig(integration_type, config);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid configuration', details: validation.errors },
         { status: 400 }
       );
     }
 
     const supabase = createServiceClient();
 
-    // Insert or update integration
-    const { data: integration, error } = await supabase
-      .from('agent_integrations')
-      .upsert({
-        agent_id: agentId,
-        integration_type: integrationType,
-        credentials,
-        settings: settings || {},
-        is_active: true,
-        last_synced_at: new Date().toISOString()
-      }, {
-        onConflict: 'agent_id,integration_type'
-      })
-      .select()
+    // Get agent to verify access and get organization_id
+    const { data: agent, error: agentError } = await supabase
+      .from('agents')
+      .select('organization_id')
+      .eq('id', agentId)
       .single();
 
-    if (error) {
-      console.error('Error creating integration:', error);
+    if (agentError || !agent) {
       return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
+        { success: false, error: 'Agent not found' },
+        { status: 404 }
       );
     }
 
-    // Update agent's prompt to include integration functions
-    await updatePromptWithIntegration(agentId, integrationType, settings || {});
+    // Determine auth type
+    const metadata = IntegrationFactory.getMetadata(integration_type);
+    const auth_type = metadata.authType;
+
+    // Prepare connection data
+    const connectionData: any = {
+      agent_id: agentId,
+      organization_id: agent.organization_id,
+      integration_type,
+      auth_type,
+      config,
+      is_active: true,
+      connection_status: 'connected',
+    };
+
+    // Add credentials based on auth type
+    if (auth_type === 'api_key') {
+      if (!api_key) {
+        return NextResponse.json(
+          { success: false, error: 'API key is required' },
+          { status: 400 }
+        );
+      }
+      connectionData.api_key = api_key;
+      if (api_secret) {
+        connectionData.api_secret = api_secret;
+      }
+    } else if (auth_type === 'webhook') {
+      if (!webhook_url) {
+        return NextResponse.json(
+          { success: false, error: 'Webhook URL is required' },
+          { status: 400 }
+        );
+      }
+      connectionData.webhook_url = webhook_url;
+    }
+
+    // Check if integration already exists
+    const { data: existing } = await supabase
+      .from('integration_connections')
+      .select('id')
+      .eq('agent_id', agentId)
+      .eq('integration_type', integration_type)
+      .single();
+
+    let integration;
+
+    if (existing) {
+      // Update existing
+      const { data, error } = await supabase
+        .from('integration_connections')
+        .update(connectionData)
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Integrations API] Error updating integration:', error);
+        return NextResponse.json(
+          { success: false, error: 'Failed to update integration' },
+          { status: 500 }
+        );
+      }
+
+      integration = data;
+    } else {
+      // Create new
+      const { data, error } = await supabase
+        .from('integration_connections')
+        .insert(connectionData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Integrations API] Error creating integration:', error);
+        return NextResponse.json(
+          { success: false, error: 'Failed to create integration' },
+          { status: 500 }
+        );
+      }
+
+      integration = data;
+    }
+
+    // Test the connection
+    const integrationInstance = IntegrationFactory.create(integration);
+    const testResult = await integrationInstance.validateConnection();
+
+    if (!testResult.success) {
+      // Update status to error
+      await supabase
+        .from('integration_connections')
+        .update({
+          connection_status: 'error',
+          last_error: testResult.error,
+        })
+        .eq('id', integration.id);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Connection test failed',
+          details: testResult.error,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Register calendar availability check tool with Retell if this is a calendar integration
+    if (['gohighlevel', 'google-calendar', 'calendly'].includes(integration_type)) {
+      try {
+        const { data: agent } = await supabase
+          .from('agents')
+          .select('retell_agent_id')
+          .eq('id', agentId)
+          .single();
+
+        if (agent?.retell_agent_id) {
+          const { updateRetellAgentTools } = await import('@/lib/retell-tools');
+          const result = await updateRetellAgentTools(agent.retell_agent_id, agentId, [integration_type]);
+
+          if (result.success) {
+            console.log(`✅ Registered calendar availability tool with Retell for agent ${agentId}`);
+          } else {
+            console.error(`⚠️ Failed to register Retell tools: ${result.error}`);
+            // Don't fail the whole integration, just log the error
+          }
+        }
+      } catch (toolError) {
+        console.error('Error registering Retell tools:', toolError);
+        // Don't fail the whole integration
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      integration
+      integration: {
+        ...integration,
+        metadata: IntegrationFactory.getMetadata(integration_type),
+      },
+      message: 'Integration connected successfully',
     });
 
   } catch (error: any) {
-    console.error('Error in POST /api/agents/[agentId]/integrations:', error);
+    console.error('[Integrations API] Error in POST:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to create integration' },
       { status: 500 }
@@ -97,137 +247,52 @@ export async function POST(
   }
 }
 
-// Helper function to update prompt with integration instructions
-async function updatePromptWithIntegration(
-  agentId: string,
-  integrationType: string,
-  settings: any
+// DELETE - Disconnect an integration
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
-  const supabase = createServiceClient();
+  try {
+    const { agentId } = await params;
+    const { searchParams } = new URL(request.url);
+    const integration_type = searchParams.get('type');
 
-  // Get current prompt
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('current_prompt:prompt_versions!current_prompt_id(*)')
-    .eq('id', agentId)
-    .single();
+    if (!integration_type) {
+      return NextResponse.json(
+        { success: false, error: 'Integration type is required' },
+        { status: 400 }
+      );
+    }
 
-  if (!agent || !agent.current_prompt) return;
+    const supabase = createServiceClient();
 
-  const currentPrompt = Array.isArray(agent.current_prompt) ? agent.current_prompt[0] : agent.current_prompt;
-  let integrationInstructions = '';
+    const { error } = await supabase
+      .from('integration_connections')
+      .delete()
+      .eq('agent_id', agentId)
+      .eq('integration_type', integration_type);
 
-  // Generate integration-specific instructions
-  switch (integrationType) {
-    case 'google-calendar':
-      integrationInstructions = `
+    if (error) {
+      console.error('[Integrations API] Error deleting integration:', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to disconnect integration' },
+        { status: 500 }
+      );
+    }
 
-## GOOGLE CALENDAR INTEGRATION
+    return NextResponse.json({
+      success: true,
+      message: 'Integration disconnected successfully',
+    });
 
-You have access to the caller's Google Calendar. When scheduling appointments:
-
-FUNCTION: check_calendar_availability
-- Call this to check if a time slot is available
-- Parameters: date (YYYY-MM-DD), time (HH:MM), duration (minutes)
-- Returns: { available: boolean, conflicting_events: [] }
-
-FUNCTION: book_appointment
-- Call this to create a calendar event
-- Parameters: date, time, duration, title, description, attendee_email
-- Returns: { success: boolean, event_id: string }
-
-${settings.autoBook ? '- Automatically book confirmed appointments' : '- Ask for confirmation before booking'}
-${settings.sendConfirmation ? '- Send email confirmations for all bookings' : ''}
-${settings.bufferTime ? `- Leave ${settings.bufferTime} minutes buffer between appointments` : ''}
-
-Example:
-Caller: "I'd like to schedule an appointment for tomorrow at 2pm"
-You: "Let me check if that time is available..."
-[Call check_calendar_availability]
-You: "Great! 2pm tomorrow is available. I'll book that for you. May I have your email for the confirmation?"
-[Collect email, then call book_appointment]
-`;
-      break;
-
-    case 'calendly':
-      integrationInstructions = `
-
-## CALENDLY INTEGRATION
-
-You can share the booking link with callers.
-
-FUNCTION: get_calendly_link
-- Returns the personalized Calendly booking URL
-- No parameters needed
-
-${settings.shareLink ? 'Share the Calendly link when appropriate during the call' : ''}
-
-Example:
-Caller: "How can I schedule an appointment?"
-You: "I can send you our booking link. You'll be able to see all available times and choose what works best for you. What's your email address?"
-[Collect email, call get_calendly_link, send link]
-`;
-      break;
-
-    case 'gohighlevel':
-      integrationInstructions = `
-
-## GOHIGHLEVEL CRM INTEGRATION
-
-${settings.createContacts ? `
-FUNCTION: create_ghl_contact
-- Call this when you collect contact information
-- Parameters: name, email, phone, notes
-- Automatically creates contact in GoHighLevel
-- Returns: { success: boolean, contact_id: string }
-` : ''}
-
-${settings.createOpportunities ? `
-FUNCTION: create_ghl_opportunity
-- Call this for qualified leads
-- Parameters: contact_id, pipeline_stage, value, description
-- Returns: { success: boolean, opportunity_id: string }
-` : ''}
-
-${settings.logCalls ? '- All calls are automatically logged in GoHighLevel' : ''}
-${settings.triggerWorkflows ? '- Specific events will trigger automated workflows' : ''}
-
-Example:
-Caller: "Hi, I'm interested in your roofing services. My name is John Smith"
-You: "Great to meet you, John! Let me get some information..."
-[Collect phone and email]
-[Call create_ghl_contact with collected info]
-${settings.createOpportunities ? '[Call create_ghl_opportunity if qualified lead]' : ''}
-`;
-      break;
-  }
-
-  if (!integrationInstructions) return;
-
-  // Append integration instructions to prompt
-  const updatedPrompt = currentPrompt.compiled_prompt + integrationInstructions;
-
-  // Create new version
-  const newVersionNumber = currentPrompt.version_number + 1;
-  const { data: newVersion } = await supabase
-    .from('prompt_versions')
-    .insert({
-      agent_id: agentId,
-      version_number: newVersionNumber,
-      compiled_prompt: updatedPrompt,
-      generation_method: 'user_edited',
-      parent_version_id: currentPrompt.id,
-      change_summary: `Added ${integrationType} integration`,
-      token_count: updatedPrompt.split(' ').length
-    })
-    .select()
-    .single();
-
-  if (newVersion) {
-    // Update agent's current prompt
-    await supabase
-      .from('agents')
-      .update({ current_prompt_id: newVersion.id })
-      .eq('id', agentId);
+  } catch (error: any) {
+    console.error('[Integrations API] Error in DELETE:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
+
+// Note: Prompt updates for integrations happen automatically during call sync
+// No need to manually update prompts here

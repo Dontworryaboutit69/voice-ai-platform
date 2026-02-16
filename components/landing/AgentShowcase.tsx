@@ -302,7 +302,7 @@ export function AgentShowcase() {
                 <div className="space-y-4">
                   <AudioPlayer agent={selectedAgent} />
                   <a
-                    href="/agents"
+                    href="/onboarding"
                     className="group flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-white text-slate-900 font-semibold text-sm hover:bg-white/90 transition-all duration-300 shadow-lg shadow-white/10"
                   >
                     Build an Agent Like {selectedAgent.name}

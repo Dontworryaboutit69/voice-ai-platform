@@ -7,19 +7,35 @@ export async function PUT(
 ) {
   try {
     const { agentId } = await params;
-    const { business_name, voice_id, status } = await request.json();
+    const {
+      business_name,
+      voice_id,
+      status,
+      email_notifications_enabled,
+      email_message_taken,
+      email_appointment_booked,
+      email_daily_summary
+    } = await request.json();
 
     const supabase = createServiceClient();
+
+    // Build update object with only provided fields
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (business_name !== undefined) updateData.business_name = business_name;
+    if (voice_id !== undefined) updateData.voice_id = voice_id;
+    if (status !== undefined) updateData.status = status;
+    if (email_notifications_enabled !== undefined) updateData.email_notifications_enabled = email_notifications_enabled;
+    if (email_message_taken !== undefined) updateData.email_message_taken = email_message_taken;
+    if (email_appointment_booked !== undefined) updateData.email_appointment_booked = email_appointment_booked;
+    if (email_daily_summary !== undefined) updateData.email_daily_summary = email_daily_summary;
 
     // Update agent settings
     const { data, error } = await supabase
       .from('agents')
-      .update({
-        business_name,
-        voice_id,
-        status,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', agentId)
       .select()
       .single();

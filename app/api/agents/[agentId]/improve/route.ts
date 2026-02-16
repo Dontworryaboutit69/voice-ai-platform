@@ -5,6 +5,58 @@ import { createServiceClient } from '@/lib/supabase/client';
 // API key - hardcoded temporarily to fix Turbopack env var issue
 const ANTHROPIC_API_KEY = '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';
 
+/**
+ * Parses a compiled prompt into individual sections
+ * This ensures sections are extracted properly, not by arbitrary character positions
+ */
+function parsePromptSections(compiledPrompt: string): {
+  role: string;
+  personality: string;
+  call_flow: string;
+  info_recap: string;
+  functions: any;
+  knowledge: string;
+} {
+  // Section markers
+  const roleMarker = '## 1. Role & Objective';
+  const personalityMarker = '## 2. Personality';
+  const callFlowMarker = '## 3. Call Flow';
+  const infoRecapMarker = '## 4. Information Recap';
+  const functionsMarker = '## 5. Function Reference';
+  const knowledgeMarker = '## 6. Knowledge Base Setup';
+
+  // Find section positions
+  const roleStart = compiledPrompt.indexOf(roleMarker);
+  const personalityStart = compiledPrompt.indexOf(personalityMarker);
+  const callFlowStart = compiledPrompt.indexOf(callFlowMarker);
+  const infoRecapStart = compiledPrompt.indexOf(infoRecapMarker);
+  const functionsStart = compiledPrompt.indexOf(functionsMarker);
+  const knowledgeStart = compiledPrompt.indexOf(knowledgeMarker);
+
+  // Extract sections (everything between markers)
+  const extractSection = (startPos: number, endPos: number): string => {
+    if (startPos === -1) return '';
+    const end = endPos !== -1 ? endPos : compiledPrompt.length;
+    return compiledPrompt.substring(startPos, end).trim();
+  };
+
+  const role = extractSection(roleStart, personalityStart);
+  const personality = extractSection(personalityStart, callFlowStart);
+  const call_flow = extractSection(callFlowStart, infoRecapStart);
+  const info_recap = extractSection(infoRecapStart, functionsStart);
+  const functions_text = extractSection(functionsStart, knowledgeStart);
+  const knowledge = extractSection(knowledgeStart, -1);
+
+  return {
+    role,
+    personality,
+    call_flow,
+    info_recap,
+    functions: functions_text,
+    knowledge
+  };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -107,15 +159,8 @@ Return ONLY the improved prompt text, no explanations or meta-commentary.`;
     // Calculate new version number
     const newVersionNumber = currentPrompt.version_number + 1;
 
-    // Parse sections (simplified - in production you'd parse more carefully)
-    const sections = {
-      role: improvedPrompt.substring(0, 500),
-      personality: improvedPrompt.substring(500, 800),
-      call_flow: improvedPrompt.substring(800, 1600),
-      info_recap: improvedPrompt.substring(1600, 1800),
-      functions: '[]',
-      knowledge: improvedPrompt.substring(1800)
-    };
+    // Parse sections properly using section markers
+    const sections = parsePromptSections(improvedPrompt);
 
     // Create new prompt version
     const { data: newVersion, error: versionError } = await supabase

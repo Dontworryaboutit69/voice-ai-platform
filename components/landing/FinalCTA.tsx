@@ -36,7 +36,7 @@ export function FinalCTA() {
 
             <div className="mt-10">
               <a
-                href="/agents"
+                href="/onboarding"
                 className="group inline-flex items-center gap-3 px-10 py-4.5 rounded-xl bg-white text-slate-900 font-bold text-lg shadow-2xl shadow-white/10 hover:shadow-white/20 hover:scale-[1.02] transition-all duration-300"
               >
                 Get Started Free

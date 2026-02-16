@@ -13,21 +13,57 @@ const jakarta = Plus_Jakarta_Sans({
   weight: ["400", "500", "600", "700", "800"],
 });
 
+const SITE_URL = "https://voiceaiplatform.com";
+
 export const metadata: Metadata = {
-  title: "Voice AI Platform — Build Pro Voice AI Agents in Minutes",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default:
+      "VoiceAI — Build AI Phone Agents That Actually Sound Human",
+    template: "%s | VoiceAI",
+  },
   description:
-    "Create agency-grade voice AI agents for your business. No coding, no complexity. Powered by Claude AI, Retell AI & ElevenLabs. Start free.",
+    "Build agency-grade voice AI agents for your business. No coding, no complexity. Powered by Claude AI, Retell AI & ElevenLabs. Start free.",
+  applicationName: "VoiceAI",
+  generator: "Next.js",
+  referrer: "origin-when-cross-origin",
+  creator: "VoiceAI",
+  publisher: "VoiceAI",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   openGraph: {
-    title: "Voice AI Platform — Build Pro Voice AI Agents in Minutes",
+    title: "VoiceAI — Build AI Phone Agents That Actually Sound Human",
     description:
       "Create agency-grade voice AI agents for your business. No coding, no complexity. Start free.",
     type: "website",
+    url: SITE_URL,
+    siteName: "VoiceAI",
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Voice AI Platform — Build Pro Voice AI Agents in Minutes",
+    title: "VoiceAI — Build AI Phone Agents That Actually Sound Human",
     description:
       "Create agency-grade voice AI agents for your business. No coding, no complexity. Start free.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    // Add when available:
+    // google: "your-google-verification-code",
+    // yandex: "your-yandex-verification-code",
   },
 };
 
@@ -38,6 +74,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="scroll-smooth">
+      <head>
+        {/* LLM discovery — helps AI search engines find structured info about your site */}
+        <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM summary" />
+        <link rel="alternate" type="text/plain" href="/llms-full.txt" title="LLM full reference" />
+      </head>
       <body
         className={`${inter.variable} ${jakarta.variable} antialiased`}
       >

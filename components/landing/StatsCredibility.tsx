@@ -22,8 +22,8 @@ export function StatsCredibility() {
               <span className="text-white/80">$5k&ndash;$20k for This</span>
             </h2>
             <p className="mt-6 text-xl text-white/70">
-              We built custom voice AI agents for businesses\u2014Zoom calls, back-and-forth,
-              $5k&ndash;$20k per build. Now you skip all of that and build it yourself in 5 minutes.
+              We built custom voice AI agents for businesses&mdash;the discovery calls,
+              the revisions, $5k&ndash;$20k per build. Now you skip all of that and build it yourself in 5 minutes.
             </p>
           </div>
         </SectionWrapper>

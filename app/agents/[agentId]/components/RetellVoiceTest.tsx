@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
+import { createBrowserClient } from '@/lib/supabase/client';
 
 interface Message {
   role: 'user' | 'agent' | 'system';
@@ -9,16 +10,16 @@ interface Message {
   timestamp: Date;
 }
 
-const VOICE_OPTIONS = [
-  { id: '11labs-Cimo', name: 'Cimo', description: 'Female, Professional (Default)' },
-  { id: '11labs-Lily', name: 'Lily', description: 'Female, Warm' },
-  { id: '11labs-Billy', name: 'Billy', description: 'Male, Confident' },
-  { id: '11labs-Marissa', name: 'Marissa', description: 'Female, Professional' },
-  { id: '11labs-Jenny', name: 'Jenny', description: 'Female, Friendly' },
-  { id: '11labs-Lucas', name: 'Lucas', description: 'Male, Clear' },
-  { id: 'openai-Nova', name: 'Nova', description: 'Female, Versatile' },
-  { id: 'cartesia-Brian', name: 'Brian', description: 'Male, Conversational' },
-  { id: 'cartesia-Emily', name: 'Emily', description: 'Female, Natural' }
+const DEFAULT_VOICE_OPTIONS = [
+  { id: '11labs-Cimo', name: 'Cimo', description: 'Female, Professional (Default)', category: 'Default' },
+  { id: '11labs-Lily', name: 'Lily', description: 'Female, Warm', category: 'Default' },
+  { id: '11labs-Billy', name: 'Billy', description: 'Male, Confident', category: 'Default' },
+  { id: '11labs-Marissa', name: 'Marissa', description: 'Female, Professional', category: 'Default' },
+  { id: '11labs-Jenny', name: 'Jenny', description: 'Female, Friendly', category: 'Default' },
+  { id: '11labs-Lucas', name: 'Lucas', description: 'Male, Clear', category: 'Default' },
+  { id: 'openai-Nova', name: 'Nova', description: 'Female, Versatile', category: 'Default' },
+  { id: 'cartesia-Brian', name: 'Brian', description: 'Male, Conversational', category: 'Default' },
+  { id: 'cartesia-Emily', name: 'Emily', description: 'Female, Natural', category: 'Default' }
 ];
 
 const MODEL_OPTIONS = [
@@ -42,11 +43,58 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
   const [selectedVoice, setSelectedVoice] = useState('11labs-Cimo');
   const [selectedModel, setSelectedModel] = useState('gpt-5.2');
   const [callDuration, setCallDuration] = useState(0);
+  const [voiceOptions, setVoiceOptions] = useState(DEFAULT_VOICE_OPTIONS);
+  const [loadingVoices, setLoadingVoices] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const retellClient = useRef<RetellWebClient | null>(null);
   const callStartTime = useRef<number | null>(null);
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
+  const supabase = createBrowserClient();
+
+  // Load saved voices on mount
+  useEffect(() => {
+    loadSavedVoices();
+  }, []);
+
+  async function loadSavedVoices() {
+    setLoadingVoices(true);
+    try {
+      // Get agent's organization_id
+      const { data: agent, error: agentError } = await supabase
+        .from('agents')
+        .select('organization_id')
+        .eq('id', agentId)
+        .single();
+
+      if (agentError || !agent) {
+        console.error('Failed to get agent organization:', agentError);
+        setLoadingVoices(false);
+        return;
+      }
+
+      // Fetch saved voices
+      const response = await fetch(`/api/voices/saved?organization_id=${agent.organization_id}`);
+      const data = await response.json();
+
+      if (data.success && data.voices && data.voices.length > 0) {
+        // Map saved voices to dropdown format
+        const savedVoiceOptions = data.voices.map((voice: any) => ({
+          id: voice.voice_id,
+          name: voice.voice_name,
+          description: `${voice.gender || ''}, ${voice.accent || ''} ${voice.is_cloned ? '(Cloned)' : ''}`.trim(),
+          category: 'Saved'
+        }));
+
+        // Combine saved voices with default voices
+        setVoiceOptions([...savedVoiceOptions, ...DEFAULT_VOICE_OPTIONS]);
+      }
+    } catch (error) {
+      console.error('Error loading saved voices:', error);
+    } finally {
+      setLoadingVoices(false);
+    }
+  }
 
   useEffect(() => {
     // Initialize Retell client
@@ -175,12 +223,45 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
 
     // Check microphone permissions first
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('🎤 Requesting microphone access...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
       console.log('✅ Microphone access granted');
+      console.log('Audio tracks:', stream.getAudioTracks().map(t => ({
+        label: t.label,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState
+      })));
+
       addMessage('system', '🎤 Microphone ready');
+
+      // Stop the test stream - Retell SDK will create its own
+      stream.getTracks().forEach(track => track.stop());
     } catch (micError: any) {
-      console.error('Microphone permission error:', micError);
-      addMessage('system', '❌ Microphone access denied. Please allow microphone access in your browser settings and try again.');
+      console.error('❌ Microphone permission error:', micError);
+      console.error('Error name:', micError.name);
+      console.error('Error message:', micError.message);
+
+      let errorMessage = '❌ Microphone access denied. ';
+
+      if (micError.name === 'NotAllowedError') {
+        errorMessage += 'Please click the lock icon in your browser\'s address bar and allow microphone access, then try again.';
+      } else if (micError.name === 'NotFoundError') {
+        errorMessage += 'No microphone found. Please connect a microphone and try again.';
+      } else if (micError.name === 'NotReadableError') {
+        errorMessage += 'Microphone is being used by another application. Please close other apps using the microphone and try again.';
+      } else {
+        errorMessage += micError.message || 'Unknown error. Please check your browser settings.';
+      }
+
+      addMessage('system', errorMessage);
       setIsConnecting(false);
       return;
     }
@@ -220,12 +301,22 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
       // Start call with access token
       if (retellClient.current) {
         console.log('Starting call with Retell SDK...');
-        await retellClient.current.startCall({
-          accessToken: data.accessToken,
-          sampleRate: 24000, // Retell requires 24kHz
-          emitRawAudioSamples: false
-        });
-        clearTimeout(timeout); // Clear timeout on success
+        console.log('Access token:', data.accessToken?.substring(0, 20) + '...');
+        console.log('Agent ID:', data.agentId);
+
+        try {
+          await retellClient.current.startCall({
+            accessToken: data.accessToken,
+            sampleRate: 24000, // Retell requires 24kHz
+            emitRawAudioSamples: false,
+            enableUpdate: true // Enable transcript updates
+          });
+          console.log('✅ Retell SDK startCall() succeeded');
+          clearTimeout(timeout); // Clear timeout on success
+        } catch (sdkError: any) {
+          console.error('❌ Retell SDK startCall() failed:', sdkError);
+          throw new Error('Retell SDK error: ' + (sdkError.message || 'Unknown SDK error'));
+        }
       } else {
         throw new Error('Retell client not initialized');
       }
@@ -442,14 +533,38 @@ export default function RetellVoiceTest({ agentId }: { agentId: string }) {
                   <select
                     value={selectedVoice}
                     onChange={(e) => setSelectedVoice(e.target.value)}
-                    disabled={isCallActive || isConnecting}
+                    disabled={isCallActive || isConnecting || loadingVoices}
                     className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-medium text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {VOICE_OPTIONS.map(voice => (
-                      <option key={voice.id} value={voice.id} className="text-gray-900">
-                        {voice.name} - {voice.description}
-                      </option>
-                    ))}
+                    {loadingVoices ? (
+                      <option value="">Loading voices...</option>
+                    ) : (
+                      <>
+                        {/* Saved Voices Section */}
+                        {voiceOptions.some(v => v.category === 'Saved') && (
+                          <optgroup label="⭐ Your Saved Voices">
+                            {voiceOptions
+                              .filter(v => v.category === 'Saved')
+                              .map(voice => (
+                                <option key={voice.id} value={voice.id} className="text-gray-900">
+                                  {voice.name} - {voice.description}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+
+                        {/* Default Voices Section */}
+                        <optgroup label="Default Voices">
+                          {voiceOptions
+                            .filter(v => v.category === 'Default')
+                            .map(voice => (
+                              <option key={voice.id} value={voice.id} className="text-gray-900">
+                                {voice.name} - {voice.description}
+                              </option>
+                            ))}
+                        </optgroup>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="h-8 w-px bg-blue-200"></div>

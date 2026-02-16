@@ -21,6 +21,7 @@ const stepStyles = [
     iconBg: "bg-indigo-500",
     ring: "ring-indigo-100",
     shadow: "shadow-indigo-500/20",
+    glowColor: "rgba(99, 91, 255, 0.08)",
   },
   {
     gradient: "from-violet-500 to-purple-500",
@@ -30,6 +31,7 @@ const stepStyles = [
     iconBg: "bg-violet-500",
     ring: "ring-violet-100",
     shadow: "shadow-violet-500/20",
+    glowColor: "rgba(139, 92, 246, 0.08)",
   },
   {
     gradient: "from-fuchsia-500 to-pink-500",
@@ -39,6 +41,7 @@ const stepStyles = [
     iconBg: "bg-fuchsia-500",
     ring: "ring-fuchsia-100",
     shadow: "shadow-fuchsia-500/20",
+    glowColor: "rgba(217, 70, 239, 0.08)",
   },
   {
     gradient: "from-emerald-500 to-teal-500",
@@ -48,6 +51,7 @@ const stepStyles = [
     iconBg: "bg-emerald-500",
     ring: "ring-emerald-100",
     shadow: "shadow-emerald-500/20",
+    glowColor: "rgba(16, 185, 129, 0.08)",
   },
 ];
 
@@ -77,7 +81,7 @@ export function HowItWorks() {
           </div>
         </SectionWrapper>
 
-        {/* Steps — horizontal cards on desktop, vertical on mobile */}
+        {/* Steps — clean 4-column layout, no screenshots */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {steps.map((step, index) => {
             const Icon = iconMap[step.icon];
@@ -87,11 +91,11 @@ export function HowItWorks() {
               <SectionWrapper key={step.number} delay={0.12 * index} className="h-full">
                 <div
                   className={clsx(
-                    "group relative rounded-2xl border bg-white p-8 transition-all duration-500 hover:shadow-xl hover:-translate-y-1 text-center h-full",
+                    "group relative rounded-2xl border bg-white p-7 transition-all duration-500 hover:shadow-xl hover:-translate-y-1 text-center h-full flex flex-col",
                     style.border
                   )}
                 >
-                  {/* Step number */}
+                  {/* Step number badge */}
                   <div
                     className={clsx(
                       "w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg ring-4 transition-all duration-300 group-hover:scale-110",
@@ -105,13 +109,13 @@ export function HowItWorks() {
 
                   {/* Icon */}
                   {Icon && (
-                    <div className={clsx("inline-flex p-2 rounded-lg mb-4", style.bg)}>
+                    <div className={clsx("inline-flex p-2 rounded-xl mb-4 mx-auto", style.bg)}>
                       <Icon className={clsx("w-5 h-5", style.text)} />
                     </div>
                   )}
 
                   {/* Title */}
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">{step.title}</h3>
+                  <h3 className="text-lg font-bold text-slate-900 mb-3">{step.title}</h3>
 
                   {/* Description */}
                   <p className="text-sm text-slate-500 leading-relaxed">
@@ -120,7 +124,7 @@ export function HowItWorks() {
 
                   {/* Connector arrow (hidden on last, shown on lg) */}
                   {index < steps.length - 1 && (
-                    <div className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white border border-slate-200 items-center justify-center shadow-sm">
+                    <div className="hidden lg:flex absolute -right-3 top-1/3 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white border border-slate-200 items-center justify-center shadow-sm">
                       <ArrowRight className="w-3 h-3 text-slate-400" />
                     </div>
                   )}
@@ -134,7 +138,7 @@ export function HowItWorks() {
         <SectionWrapper delay={0.5}>
           <div className="mt-16 text-center">
             <a
-              href="/agents"
+              href="/onboarding"
               className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-slate-900 text-white font-semibold text-[15px] hover:bg-slate-800 transition-all duration-300 shadow-xl shadow-slate-900/20"
             >
               Build My Agent Now

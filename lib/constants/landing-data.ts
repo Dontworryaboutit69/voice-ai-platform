@@ -17,10 +17,11 @@ import type {
 } from "@/lib/types/landing";
 
 export const navLinks: NavLink[] = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Features", href: "/#features" },
+  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "Blog", href: "/blog" },
+  { label: "FAQ", href: "/#faq" },
 ];
 
 export const problemCards: ProblemCard[] = [
@@ -267,6 +268,109 @@ export const testimonials: Testimonial[] = [
     date: "Dec 2024",
     avatarGradient: "from-purple-500 to-indigo-500",
   },
+  {
+    id: "13",
+    quote:
+      "I run four roofing crews and used to miss half my calls while on job sites. Now every lead gets captured, qualified, and scheduled before I even check my phone. We booked 41 new estimates last month\u2014all while I was on a roof.",
+    authorName: "Jake Morrison",
+    authorRole: "Owner",
+    company: "Summit Roofing Co.",
+    avatarUrl: null,
+    metric: "41 estimates booked/mo",
+    rating: 5,
+    date: "Jan 2025",
+    avatarGradient: "from-slate-500 to-zinc-600",
+  },
+  {
+    id: "14",
+    quote:
+      "The voice cloning feature is insane. We recorded our office manager saying a few sentences and now the AI sounds exactly like her. Clients have no idea. It\u2019s genuinely indistinguishable.",
+    authorName: "Natalie Tran",
+    authorRole: "Practice Manager",
+    company: "Harmony Orthodontics",
+    avatarUrl: null,
+    rating: 5,
+    date: "Feb 2025",
+    avatarGradient: "from-sky-500 to-blue-500",
+  },
+  {
+    id: "15",
+    quote:
+      "We went from a 22% missed call rate to literally zero. Every single call gets answered, every lead gets captured. The analytics dashboard alone is worth the subscription\u2014I can finally see exactly where our calls are coming from.",
+    authorName: "Robert Simmons",
+    authorRole: "General Manager",
+    company: "Cascade Electric",
+    avatarUrl: null,
+    metric: "0% missed calls",
+    rating: 5,
+    date: "Nov 2024",
+    avatarGradient: "from-yellow-500 to-amber-500",
+  },
+  {
+    id: "16",
+    quote:
+      "I literally set this up during my lunch break. By 2pm it was live. By 5pm it had booked three appointments. I\u2019ve never seen software deliver value that fast.",
+    authorName: "Michelle Park",
+    authorRole: "Owner",
+    company: "Serenity Day Spa",
+    avatarUrl: null,
+    metric: "3 bookings on day 1",
+    rating: 5,
+    date: "Jan 2025",
+    avatarGradient: "from-pink-400 to-fuchsia-500",
+  },
+  {
+    id: "17",
+    quote:
+      "We handle emergency calls 24/7 for property managers. Before this, we had a rotating on-call team that cost us $8k/month. The AI triages urgency perfectly\u2014actual emergencies get routed to our crew, everything else gets scheduled for business hours.",
+    authorName: "Victor Daniels",
+    authorRole: "Operations Director",
+    company: "Rapid Response Maintenance",
+    avatarUrl: null,
+    metric: "$8k/mo saved",
+    rating: 5,
+    date: "Dec 2024",
+    avatarGradient: "from-red-500 to-rose-500",
+  },
+  {
+    id: "18",
+    quote:
+      "The AI Manager feature literally optimizes itself. After a week of calls, it suggested changing our greeting and adding a question about insurance upfront. Conversion went up 18% just from those two tweaks. I didn\u2019t even have to think about it.",
+    authorName: "Stephanie Cruz",
+    authorRole: "Front Office Lead",
+    company: "Valley Dental Associates",
+    avatarUrl: null,
+    metric: "+18% conversion",
+    rating: 5,
+    date: "Feb 2025",
+    avatarGradient: "from-violet-400 to-purple-600",
+    isVideo: true,
+  },
+  {
+    id: "19",
+    quote:
+      "Hands down the best investment we\u2019ve made this year. Our competitors are still sending callers to voicemail. We\u2019re booking them instantly. That\u2019s the difference between growing and staying stuck.",
+    authorName: "Derek Thompson",
+    authorRole: "Co-Founder",
+    company: "Atlas Construction Group",
+    avatarUrl: null,
+    rating: 5,
+    date: "Jan 2025",
+    avatarGradient: "from-emerald-400 to-green-600",
+  },
+  {
+    id: "20",
+    quote:
+      "We tested five different AI phone tools. Two couldn\u2019t handle interruptions. One sounded like a robot from 2005. One charged per minute with hidden fees. This was the only one that sounded human AND actually understood our complex booking rules.",
+    authorName: "Angela Russo",
+    authorRole: "CEO",
+    company: "Premier Pet Hospital",
+    avatarUrl: null,
+    metric: "5 competitors tested",
+    rating: 5,
+    date: "Nov 2024",
+    avatarGradient: "from-lime-500 to-emerald-500",
+  },
 ];
 
 export const platformStats: PlatformStat[] = [
@@ -310,7 +414,7 @@ export const pricingTiers: PricingTier[] = [
       "5 premium voice options",
       "Marketplace templates",
     ],
-    cta: { label: "Get Started Free", href: "/agents" },
+    cta: { label: "Get Started Free", href: "/onboarding" },
     isPopular: false,
   },
   {
@@ -329,7 +433,7 @@ export const pricingTiers: PricingTier[] = [
       "Self-learning AI",
       "Priority support",
     ],
-    cta: { label: "Start Pro", href: "/agents" },
+    cta: { label: "Start Pro", href: "/onboarding" },
     isPopular: true,
   },
   {
@@ -348,7 +452,7 @@ export const pricingTiers: PricingTier[] = [
       "Custom phone numbers",
       "Dedicated support",
     ],
-    cta: { label: "Start Business", href: "/agents" },
+    cta: { label: "Start Business", href: "/onboarding" },
     isPopular: false,
   },
   {
@@ -367,7 +471,7 @@ export const pricingTiers: PricingTier[] = [
       "Custom integrations",
       "Hands-on onboarding",
     ],
-    cta: { label: "Contact Sales", href: "/agents" },
+    cta: { label: "Contact Sales", href: "/onboarding" },
     isPopular: false,
   },
 ];
@@ -437,7 +541,7 @@ export const footerColumns: FooterColumn[] = [
     title: "Company",
     links: [
       { label: "About", href: "#" },
-      { label: "Blog", href: "#" },
+      { label: "Blog", href: "/blog" },
       { label: "Careers", href: "#" },
       { label: "Contact", href: "#" },
     ],
@@ -666,5 +770,5 @@ export const quizResult: QuizResult = {
   description:
     "Based on your answers, we\u2019ll generate a voice AI agent built specifically for your business\u2014not a template. Start free, no credit card required.",
   discount: "\ud83c\udf89 Limited offer: First month of Pro free when you sign up today",
-  cta: { label: "Build My Custom Agent \u2014 Free", href: "/agents" },
+  cta: { label: "Build My Custom Agent \u2014 Free", href: "/onboarding" },
 };

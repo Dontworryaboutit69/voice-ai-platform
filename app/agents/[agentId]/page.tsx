@@ -6,7 +6,10 @@ import RetellVoiceTest from './components/RetellVoiceTest';
 import WelcomeModal from './components/WelcomeModal';
 import TourTooltip from './components/TourTooltip';
 import IntegrationModal from './components/IntegrationModal';
+import DataCollectionConfig from './components/DataCollectionConfig';
+import AIManagerTab from './components/AIManagerTab';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 interface Agent {
   id: string;
@@ -29,6 +32,7 @@ interface PromptVersion {
 type Tab = 'prompt' | 'knowledge' | 'test' | 'voices' | 'calls' | 'integrations' | 'marketplace' | 'settings' | 'ai-manager' | 'scoreboard';
 
 export default function AgentDashboard() {
+  console.log('🚀 AGENT DASHBOARD LOADED - CODE VERSION 2.0');
   const params = useParams();
   const router = useRouter();
   const supabase = createBrowserClient();
@@ -44,6 +48,11 @@ export default function AgentDashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState('');
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [showEditModeModal, setShowEditModeModal] = useState(false);
+  const [editMode, setEditMode] = useState<'chat' | 'manual' | null>(null);
+  const [chatEditFeedback, setChatEditFeedback] = useState('');
+  const [isProcessingChatEdit, setIsProcessingChatEdit] = useState(false);
+  const [promptValidationError, setPromptValidationError] = useState<string | null>(null);
   const [knowledgeBaseItems, setKnowledgeBaseItems] = useState<Array<{name: string, content: string}>>([]);
   const [showKBModal, setShowKBModal] = useState(false);
   const [kbSourceType, setKbSourceType] = useState<'file' | 'url' | 'manual'>('file');
@@ -117,6 +126,7 @@ export default function AgentDashboard() {
   useEffect(() => {
     loadData();
     loadAllAgents();
+    loadIntegrations();
 
     // Debug logging
     console.log('Modal States:', {
@@ -151,10 +161,14 @@ export default function AgentDashboard() {
 
   async function loadData() {
     try {
+      console.log('[Agent Page] Loading agent data for:', agentId);
       const response = await fetch(`/api/agents/${agentId}/prompt`);
       const data = await response.json();
 
+      console.log('[Agent Page] API response:', { success: data.success, error: data.error, status: response.status });
+
       if (data.success) {
+        console.log('[Agent Page] Setting agent and prompt data');
         setAgent(data.agent);
         setPrompt(data.promptVersion);
 
@@ -170,9 +184,11 @@ export default function AgentDashboard() {
         setSettingsName(data.agent.business_name || '');
         setSettingsVoice(data.agent.voice_id || '11labs-Sarah');
         setSettingsStatus(data.agent.status || 'draft');
+      } else {
+        console.error('[Agent Page] API returned error:', data.error);
       }
     } catch (error) {
-      console.error('Error loading agent:', error);
+      console.error('[Agent Page] Error loading agent:', error);
     } finally {
       setLoading(false);
     }
@@ -190,6 +206,90 @@ export default function AgentDashboard() {
       }
     } catch (error) {
       console.error('Error loading all agents:', error);
+    }
+  }
+
+  async function loadIntegrations() {
+    try {
+      console.log('[Integrations] Loading integrations for agent:', agentId);
+      const response = await fetch(`/api/agents/${agentId}/integrations`);
+      const data = await response.json();
+
+      if (data.success && data.integrations) {
+        console.log('[Integrations] Loaded integrations:', data.integrations);
+
+        // Map integrations to activeIntegrations format
+        const mappedIntegrations = data.integrations
+          .filter((int: any) => int.is_active)
+          .map((int: any) => ({
+            type: int.integration_type,
+            name: int.metadata?.name || int.integration_type,
+            isActive: true,
+            id: int.id,
+            config: int.config
+          }));
+
+        setActiveIntegrations(mappedIntegrations);
+        console.log('[Integrations] Set active integrations:', mappedIntegrations);
+      } else {
+        console.log('[Integrations] No integrations found or error:', data.error);
+      }
+    } catch (error) {
+      console.error('[Integrations] Error loading integrations:', error);
+    }
+  }
+
+  async function handleTestIntegration(integration: any) {
+    try {
+      console.log('[Integration] Testing integration:', integration);
+      toast.info('Testing connection...');
+
+      const response = await fetch(`/api/agents/${agentId}/integrations/${integration.type}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ integration_id: integration.id })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Connection test successful!');
+      } else {
+        toast.error(`Test failed: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('[Integration] Test error:', error);
+      toast.error(`Test error: ${error.message}`);
+    }
+  }
+
+  async function handleDisconnectIntegration(integration: any) {
+    if (!confirm(`Are you sure you want to disconnect ${integration.name}?`)) {
+      return;
+    }
+
+    try {
+      console.log('[Integration] Disconnecting:', integration);
+      toast.info('Disconnecting...');
+
+      const response = await fetch(`/api/agents/${agentId}/integrations?type=${integration.type}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Integration disconnected successfully!');
+        // Remove from activeIntegrations state
+        setActiveIntegrations(prev => prev.filter(int => int.id !== integration.id));
+        // Reload integrations to be sure
+        await loadIntegrations();
+      } else {
+        toast.error(`Failed to disconnect: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('[Integration] Disconnect error:', error);
+      toast.error(`Disconnect error: ${error.message}`);
     }
   }
 
@@ -320,11 +420,28 @@ export default function AgentDashboard() {
     };
 
     try {
+      // Get organization_id from agent
+      let organizationId = agent?.organization_id;
+      if (!organizationId) {
+        const { data: agentData, error } = await supabase
+          .from('agents')
+          .select('organization_id')
+          .eq('id', agentId)
+          .single();
+
+        if (error || !agentData) {
+          console.error('Failed to get organization_id:', error);
+          organizationId = agentId; // Fallback to agentId if query fails
+        } else {
+          organizationId = agentData.organization_id;
+        }
+      }
+
       // Load voices from all APIs in parallel with timeouts
       const [retellData, elevenlabsData, savedData] = await Promise.all([
         fetchWithTimeout('/api/voices/retell', 10000),
         fetchWithTimeout('/api/voices/elevenlabs', 8000),
-        fetchWithTimeout(`/api/voices/saved?organization_id=${agent?.id || agentId}`, 5000)
+        fetchWithTimeout(`/api/voices/saved?organization_id=${organizationId}`, 5000)
       ]);
 
       if (retellData.success) {
@@ -637,26 +754,84 @@ export default function AgentDashboard() {
   }
 
   async function saveVoiceToLibrary(voice: any) {
+    console.log('[saveVoiceToLibrary] FUNCTION CALLED! Voice:', voice);
+
+    const toastId = toast.loading('Saving voice to your library...');
+
     try {
+      console.log('[saveVoiceToLibrary] Starting with voice:', voice);
+
+      // Get organization_id from agent
+      if (!agent) {
+        toast.error('Agent data not loaded yet', { id: toastId });
+        return;
+      }
+
+      console.log('[saveVoiceToLibrary] Agent:', agent);
+
+      // Fetch agent's organization_id if not already loaded
+      let organizationId = agent.organization_id;
+      if (!organizationId) {
+        console.log('[saveVoiceToLibrary] Organization ID not in agent, fetching...');
+        const { data: agentData, error } = await supabase
+          .from('agents')
+          .select('organization_id')
+          .eq('id', agentId)
+          .single();
+
+        if (error || !agentData) {
+          toast.error('Failed to get organization info', { id: toastId });
+          console.error('Error fetching agent organization:', error);
+          return;
+        }
+        organizationId = agentData.organization_id;
+      }
+
+      console.log('[saveVoiceToLibrary] Organization ID:', organizationId);
+
+      // Format voice_id for Retell compatibility
+      let retellVoiceId = voice.voice_id;
+
+      // If this is an ElevenLabs voice, ensure it has the 11labs- prefix for Retell
+      if (voice.provider === 'elevenlabs' && !retellVoiceId.startsWith('11labs-')) {
+        retellVoiceId = `11labs-${retellVoiceId}`;
+        console.log('[saveVoiceToLibrary] Formatted ElevenLabs voice_id for Retell:', retellVoiceId);
+      }
+
+      const payload = {
+        organization_id: organizationId,
+        ...voice,
+        voice_id: retellVoiceId // Use Retell-formatted voice ID
+      };
+
+      console.log('[saveVoiceToLibrary] Sending payload:', payload);
+
       const response = await fetch('/api/voices/saved', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organization_id: agent?.id || agentId,
-          ...voice
-        })
+        body: JSON.stringify(payload)
       });
 
+      console.log('[saveVoiceToLibrary] Response status:', response.status);
+
       const data = await response.json();
+      console.log('[saveVoiceToLibrary] Response data:', data);
+
       if (data.success) {
         setSavedVoices([...savedVoices, data.voice]);
-        alert('Voice saved to your library!');
+        toast.success(`✅ ${voice.voice_name} saved to your library!`, { id: toastId });
+        // Refresh voices to show in saved section
+        loadVoices();
       } else {
-        alert(data.error || 'Failed to save voice');
+        if (data.error === 'Voice already saved') {
+          toast.info('This voice is already in your library', { id: toastId });
+        } else {
+          toast.error(data.error || 'Failed to save voice', { id: toastId });
+        }
       }
     } catch (error) {
-      console.error('Error saving voice:', error);
-      alert('Failed to save voice');
+      console.error('[saveVoiceToLibrary] Error:', error);
+      toast.error('Failed to save voice', { id: toastId });
     }
   }
 
@@ -1023,7 +1198,17 @@ export default function AgentDashboard() {
                   <p className="text-gray-600">View and edit your agent's conversation prompt</p>
                 </div>
                 <button
-                  onClick={() => setIsEditing(!isEditing)}
+                  onClick={() => {
+                    if (!isEditing) {
+                      setShowEditModeModal(true);
+                    } else {
+                      // Cancel editing
+                      setIsEditing(false);
+                      setEditMode(null);
+                      setChatEditFeedback('');
+                      setPromptValidationError(null);
+                    }
+                  }}
                   className={`px-6 py-3 rounded-xl font-semibold transition-all ${
                     isEditing
                       ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1034,16 +1219,120 @@ export default function AgentDashboard() {
                 </button>
               </div>
 
-              {isEditing ? (
+              {isEditing && editMode === 'chat' ? (
                 <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
+                  <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                    <h3 className="text-lg font-bold text-blue-900 mb-2">💬 Chat to Edit Mode</h3>
+                    <p className="text-sm text-blue-800">
+                      Describe what you want to change and the AI will intelligently update only the relevant sections of your prompt.
+                    </p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      What would you like to change?
+                    </label>
+                    <textarea
+                      value={chatEditFeedback}
+                      onChange={(e) => setChatEditFeedback(e.target.value)}
+                      placeholder="Example: Change the agent's name to Emily&#10;Example: Make the greeting more professional&#10;Example: Add a section about handling refund requests"
+                      className="w-full h-[120px] p-4 border-2 border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none placeholder:text-gray-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 mb-6">
+                    <button
+                      onClick={async () => {
+                        if (!chatEditFeedback.trim()) return;
+
+                        setIsProcessingChatEdit(true);
+                        try {
+                          const response = await fetch(`/api/agents/${agentId}/prompt/chat-edit`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ feedback: chatEditFeedback })
+                          });
+
+                          const data = await response.json();
+
+                          if (data.success) {
+                            setPrompt(data.newVersion);
+                            setEditedPrompt(data.newVersion.compiled_prompt);
+                            setChatEditFeedback('');
+                            setIsEditing(false);
+                            setEditMode(null);
+                          } else {
+                            alert('Failed to apply changes: ' + data.error);
+                          }
+                        } catch (error) {
+                          console.error('Chat edit error:', error);
+                          alert('Failed to apply changes');
+                        } finally {
+                          setIsProcessingChatEdit(false);
+                        }
+                      }}
+                      disabled={!chatEditFeedback.trim() || isProcessingChatEdit}
+                      className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isProcessingChatEdit ? '⏳ Applying Changes...' : '✨ Apply Changes'}
+                    </button>
+                  </div>
+
+                  <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
+                    <h4 className="text-sm font-bold text-gray-700 mb-2">📝 Current Prompt Preview</h4>
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <pre className="whitespace-pre-wrap font-mono text-xs text-gray-700">
+                        {prompt.compiled_prompt.substring(0, 1000)}...
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : isEditing && editMode === 'manual' ? (
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
+                  <div className="mb-6 bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+                    <h3 className="text-lg font-bold text-orange-900 mb-2">⚙️ Manual Edit Mode</h3>
+                    <p className="text-sm text-orange-800">
+                      You're editing the raw prompt. Make sure to preserve all section headers (## 1. Role & Objective, etc.)
+                    </p>
+                  </div>
+
+                  {promptValidationError && (
+                    <div className="mb-4 bg-red-50 border-2 border-red-300 rounded-xl p-4">
+                      <p className="text-sm font-bold text-red-900">⚠️ Validation Error</p>
+                      <p className="text-sm text-red-800 mt-1">{promptValidationError}</p>
+                    </div>
+                  )}
+
                   <textarea
                     value={editedPrompt}
-                    onChange={(e) => setEditedPrompt(e.target.value)}
-                    className="w-full h-[600px] p-5 border-2 border-gray-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    onChange={(e) => {
+                      setEditedPrompt(e.target.value);
+                      setPromptValidationError(null);
+                    }}
+                    className="w-full h-[600px] p-5 border-2 border-gray-200 rounded-xl font-mono text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
                   />
                   <div className="mt-6 flex gap-3">
                     <button
-                      onClick={savePromptChanges}
+                      onClick={async () => {
+                        // Validate before saving
+                        const requiredSections = [
+                          '## 1. Role & Objective',
+                          '## 2. Personality',
+                          '## 3. Call Flow',
+                          '## 4. Information Recap',
+                          '## 5. Function Reference',
+                          '## 6. Knowledge Base Setup'
+                        ];
+
+                        const missingSections = requiredSections.filter(s => !editedPrompt.includes(s));
+
+                        if (missingSections.length > 0) {
+                          setPromptValidationError(`Missing required sections: ${missingSections.join(', ')}`);
+                          return;
+                        }
+
+                        await savePromptChanges();
+                      }}
                       disabled={isSavingPrompt}
                       className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -1053,6 +1342,8 @@ export default function AgentDashboard() {
                       onClick={() => {
                         setEditedPrompt(prompt.compiled_prompt);
                         setIsEditing(false);
+                        setEditMode(null);
+                        setPromptValidationError(null);
                       }}
                       className="px-8 py-3 text-gray-700 border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold transition-all"
                     >
@@ -1221,10 +1512,16 @@ export default function AgentDashboard() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-all">
-                            ⚙️ Settings
+                          <button
+                            onClick={() => handleTestIntegration(integration)}
+                            className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-all"
+                          >
+                            🧪 Test
                           </button>
-                          <button className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-all">
+                          <button
+                            onClick={() => handleDisconnectIntegration(integration)}
+                            className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-all"
+                          >
                             Disconnect
                           </button>
                         </div>
@@ -1337,20 +1634,199 @@ export default function AgentDashboard() {
                       </button>
                     </div>
                   </div>
+
+                  {/* HubSpot */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-orange-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          🟠
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">HubSpot</h4>
+                          <p className="text-gray-600 mb-3">Sync contacts, create deals, and update your sales pipeline automatically</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">✓ Contact sync</span>
+                            <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">✓ Create deals</span>
+                            <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">✓ Timeline notes</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('hubspot');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 font-semibold shadow-lg shadow-orange-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Salesforce */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-cyan-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          ☁️
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">Salesforce</h4>
+                          <p className="text-gray-600 mb-3">Create leads, manage contacts, and track opportunities in Salesforce</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-cyan-100 text-cyan-700 text-xs font-bold rounded-full">✓ Create leads</span>
+                            <span className="px-3 py-1 bg-cyan-100 text-cyan-700 text-xs font-bold rounded-full">✓ Opportunities</span>
+                            <span className="px-3 py-1 bg-cyan-100 text-cyan-700 text-xs font-bold rounded-full">✓ Activities</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('salesforce');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-cyan-700 text-white rounded-xl hover:from-cyan-700 hover:to-cyan-800 font-semibold shadow-lg shadow-cyan-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Coming Soon */}
-              <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 p-8 text-center">
-                <div className="text-4xl mb-3">🚀</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">More Integrations Coming Soon</h3>
-                <p className="text-gray-600 mb-4">
-                  We're adding HubSpot, Salesforce, Square, Shopify, and more. <br />
-                  Need a specific integration? Let us know!
-                </p>
-                <button className="px-6 py-3 text-blue-600 border-2 border-blue-600 rounded-xl hover:bg-blue-50 font-semibold transition-all">
-                  Request an Integration
-                </button>
+              {/* Field Service */}
+              <div className="mb-8">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🏠</span>
+                  Field Service Management
+                </h3>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Housecall Pro */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-green-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          🏠
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">Housecall Pro</h4>
+                          <p className="text-gray-600 mb-3">Schedule jobs, create customers, and dispatch technicians automatically</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">✓ Schedule jobs</span>
+                            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">✓ Create customers</span>
+                            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">✓ Dispatch</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('housecall-pro');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 font-semibold shadow-lg shadow-green-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cal.com */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-teal-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          🗓️
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">Cal.com</h4>
+                          <p className="text-gray-600 mb-3">Open-source scheduling with full API control and custom branding</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-teal-100 text-teal-700 text-xs font-bold rounded-full">✓ Book appointments</span>
+                            <span className="px-3 py-1 bg-teal-100 text-teal-700 text-xs font-bold rounded-full">✓ Check availability</span>
+                            <span className="px-3 py-1 bg-teal-100 text-teal-700 text-xs font-bold rounded-full">✓ Custom branding</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('cal-com');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl hover:from-teal-700 hover:to-teal-800 font-semibold shadow-lg shadow-teal-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Automation & Payments */}
+              <div className="mb-8">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">⚡</span>
+                  Automation & Payments
+                </h3>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Zapier */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-yellow-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          ⚡
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">Zapier</h4>
+                          <p className="text-gray-600 mb-3">Connect to 5,000+ apps with custom webhooks and automation workflows</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">✓ Webhooks</span>
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">✓ 5,000+ apps</span>
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">✓ Custom workflows</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('zapier');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-xl hover:from-yellow-700 hover:to-yellow-800 font-semibold shadow-lg shadow-yellow-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Stripe */}
+                  <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-6 hover:shadow-xl hover:border-violet-300 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          💳
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">Stripe</h4>
+                          <p className="text-gray-600 mb-3">Process payments, send invoices, and manage customer billing</p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-bold rounded-full">✓ Payment processing</span>
+                            <span className="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-bold rounded-full">✓ Invoices</span>
+                            <span className="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-bold rounded-full">✓ Payment links</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedIntegration('stripe');
+                          setShowIntegrationModal(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-violet-600 to-violet-700 text-white rounded-xl hover:from-violet-700 hover:to-violet-800 font-semibold shadow-lg shadow-violet-600/30 transition-all whitespace-nowrap"
+                      >
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1776,6 +2252,7 @@ export default function AgentDashboard() {
                               <button
                                 type="button"
                                 onClick={(e) => {
+                                  console.log('⭐ STAR BUTTON CLICKED!', voice.voice_name);
                                   e.preventDefault();
                                   e.stopPropagation();
                                   saveVoiceToLibrary(voice);
@@ -1861,7 +2338,10 @@ export default function AgentDashboard() {
                                 Preview
                               </button>
                               <button
-                                onClick={() => saveVoiceToLibrary(voice)}
+                                onClick={() => {
+                                  console.log('⭐ STAR BUTTON CLICKED (Retell)!', voice.voice_name);
+                                  saveVoiceToLibrary(voice);
+                                }}
                                 className="px-5 py-3.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-500 hover:to-orange-600 rounded-xl font-bold shadow-lg shadow-yellow-500/30 hover:shadow-yellow-500/50 transition-all duration-300 flex items-center justify-center"
                               >
                                 <span className="text-lg">⭐</span>
@@ -2168,108 +2648,7 @@ export default function AgentDashboard() {
 
           {/* AI Manager Tab */}
           {activeTab === 'ai-manager' && (
-            <div className="max-w-7xl mx-auto">
-              <div className="mb-10">
-                <h2 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-3">
-                  🤖 AI Manager
-                </h2>
-                <p className="text-lg text-gray-600">Weekly call analysis and automated script improvements</p>
-              </div>
-
-              {/* Overview Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold text-gray-900">This Week</h3>
-                    <span className="text-3xl">📊</span>
-                  </div>
-                  <p className="text-3xl font-extrabold text-purple-600">0</p>
-                  <p className="text-sm text-gray-600 mt-1">Calls Analyzed</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold text-gray-900">Pending</h3>
-                    <span className="text-3xl">⏳</span>
-                  </div>
-                  <p className="text-3xl font-extrabold text-blue-600">0</p>
-                  <p className="text-sm text-gray-600 mt-1">Script Changes</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold text-gray-900">Approved</h3>
-                    <span className="text-3xl">✅</span>
-                  </div>
-                  <p className="text-3xl font-extrabold text-green-600">0</p>
-                  <p className="text-sm text-gray-600 mt-1">This Month</p>
-                </div>
-              </div>
-
-              {/* Pending Script Changes Section */}
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
-                <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6">
-                  <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-                    <span>📝</span> Pending Script Improvements
-                  </h3>
-                  <p className="text-purple-100 mt-1">AI-generated suggestions based on call analysis</p>
-                </div>
-
-                <div className="p-8">
-                  {/* Empty State */}
-                  <div className="text-center py-16">
-                    <div className="text-6xl mb-4">🤖</div>
-                    <h4 className="text-xl font-bold text-gray-900 mb-2">No pending changes yet</h4>
-                    <p className="text-gray-600 mb-6">
-                      The AI Manager analyzes your calls every week and suggests script improvements.
-                    </p>
-                    <div className="inline-block bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
-                      <p className="text-sm text-gray-700">
-                        <strong>Next analysis:</strong> Every Monday at 9:00 AM
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* How It Works */}
-              <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-gray-200 p-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                  <span>💡</span> How AI Manager Works
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">📞</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-2">1. Analyze Calls</h4>
-                    <p className="text-sm text-gray-600">
-                      Reviews all call transcripts from the week to identify patterns and areas for improvement
-                    </p>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">🎯</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-2">2. Generate Changes</h4>
-                    <p className="text-sm text-gray-600">
-                      AI suggests specific script improvements based on successful conversation patterns
-                    </p>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">✅</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-2">3. You Approve</h4>
-                    <p className="text-sm text-gray-600">
-                      Review suggested changes and approve to automatically update your agent's script
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AIManagerTab agentId={agentId} />
           )}
 
           {/* Settings Tab */}
@@ -2369,6 +2748,15 @@ export default function AgentDashboard() {
                 </div>
               </div>
 
+              {/* Data Collection Configuration */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📋</span>
+                  Post-Call Data Collection
+                </h3>
+                <DataCollectionConfig agentId={agentId} />
+              </div>
+
               {/* Agent Configuration */}
               <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
                 <div className="space-y-6">
@@ -2458,29 +2846,71 @@ export default function AgentDashboard() {
       {/* Integration Modal */}
       {showIntegrationModal && selectedIntegration && (
         <IntegrationModal
+          agentId={agentId}
           integrationType={selectedIntegration}
           onClose={() => {
             setShowIntegrationModal(false);
             setSelectedIntegration(null);
           }}
           onSave={async (credentials, settings) => {
-            // TODO: Save to database via API
-            console.log('Saving integration:', selectedIntegration, credentials, settings);
+            try {
+              console.log('Saving integration:', selectedIntegration, credentials, settings);
 
-            // Add to active integrations
-            setActiveIntegrations([
-              ...activeIntegrations,
-              {
-                type: selectedIntegration,
-                name: selectedIntegration === 'google-calendar' ? 'Google Calendar'
-                     : selectedIntegration === 'calendly' ? 'Calendly'
-                     : 'GoHighLevel',
-                isActive: true
+              // Prepare request body based on integration type
+              const requestBody: any = {
+                integration_type: selectedIntegration,
+                config: { ...settings }
+              };
+
+              // Add credentials based on what's provided
+              if (credentials.api_key) {
+                requestBody.api_key = credentials.api_key;
               }
-            ]);
+              if (credentials.api_secret) {
+                requestBody.api_secret = credentials.api_secret;
+              }
+              if (credentials.webhook_url) {
+                requestBody.webhook_url = credentials.webhook_url;
+              }
+              if (credentials.location_id) {
+                requestBody.config.location_id = credentials.location_id;
+              }
+              if (credentials.company_id) {
+                requestBody.config.company_id = credentials.company_id;
+              }
+              if (credentials.create_as) {
+                requestBody.config.create_as = credentials.create_as;
+              }
 
-            setShowIntegrationModal(false);
-            setSelectedIntegration(null);
+              console.log('Request body:', requestBody);
+
+              // Call API to save integration
+              const response = await fetch(`/api/agents/${agentId}/integrations`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+              });
+
+              const result = await response.json();
+
+              if (!result.success) {
+                alert(`Failed to connect integration: ${result.error || result.details || 'Unknown error'}`);
+                return;
+              }
+
+              // Reload integrations to get updated list
+              await loadIntegrations();
+
+              setShowIntegrationModal(false);
+              setSelectedIntegration(null);
+
+              toast.success('Integration connected successfully!');
+            } catch (error) {
+              console.error('Error saving integration:', error);
+              toast.error('Failed to save integration. Please try again.');
+            }
           }}
         />
       )}
@@ -2995,7 +3425,7 @@ export default function AgentDashboard() {
                           onChange={(e) => setCallFeedback(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && submitCallFeedback()}
                           placeholder="Found an issue? Tell the AI how to improve (e.g., 'Be more empathetic when handling objections')"
-                          className="flex-1 px-4 py-3 border-2 border-yellow-300 bg-white rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium text-sm"
+                          className="flex-1 px-4 py-3 border-2 border-yellow-300 bg-white rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium text-sm text-gray-900 placeholder:text-gray-500"
                           disabled={isProcessingCallFeedback}
                         />
                         <button
@@ -3024,6 +3454,74 @@ export default function AgentDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Mode Selection Modal */}
+      {showEditModeModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">✏️ How would you like to edit?</h2>
+            <p className="text-gray-600 mb-8">Choose your editing method</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Chat to Edit (Recommended) */}
+              <button
+                onClick={() => {
+                  setEditMode('chat');
+                  setIsEditing(true);
+                  setShowEditModeModal(false);
+                }}
+                className="group relative bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-6 hover:from-blue-100 hover:to-blue-200 hover:border-blue-400 transition-all text-left"
+              >
+                <div className="absolute top-4 right-4 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  RECOMMENDED
+                </div>
+                <div className="text-4xl mb-4">💬</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Chat to Edit</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  Tell the AI what you want to change and it will intelligently update only the relevant sections.
+                </p>
+                <div className="text-xs text-blue-700 font-semibold">
+                  ✓ Safe - Won't break prompt structure<br/>
+                  ✓ Smart - Only edits what needs changing<br/>
+                  ✓ Fast - Just describe your changes
+                </div>
+              </button>
+
+              {/* Manual Edit (Advanced) */}
+              <button
+                onClick={() => {
+                  setEditMode('manual');
+                  setEditedPrompt(prompt.compiled_prompt);
+                  setIsEditing(true);
+                  setShowEditModeModal(false);
+                }}
+                className="group relative bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-300 rounded-2xl p-6 hover:from-gray-100 hover:to-gray-200 hover:border-gray-400 transition-all text-left"
+              >
+                <div className="absolute top-4 right-4 bg-orange-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  ADVANCED
+                </div>
+                <div className="text-4xl mb-4">⚙️</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Manual Edit</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  Direct access to edit the raw prompt text. Includes validation to prevent breaking the structure.
+                </p>
+                <div className="text-xs text-orange-700 font-semibold">
+                  ⚠️ Advanced users only<br/>
+                  ✓ Validated before saving<br/>
+                  ✓ Shows warnings if sections missing
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowEditModeModal(false)}
+              className="mt-8 w-full px-6 py-3 text-gray-700 border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold transition-all"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

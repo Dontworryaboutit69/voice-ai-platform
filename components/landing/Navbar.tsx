@@ -33,7 +33,7 @@ export function Navbar() {
       >
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2.5">
+          <a href="/" className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg gradient-brand flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <span className="text-white font-bold text-xs">V</span>
             </div>
@@ -67,7 +67,7 @@ export function Navbar() {
 
           {/* CTA */}
           <a
-            href="/agents"
+            href="/onboarding"
             className={clsx(
               "hidden md:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-300",
               scrolled
@@ -114,7 +114,7 @@ export function Navbar() {
               ))}
               <div className="pt-2 border-t border-slate-100 mt-2">
                 <a
-                  href="/agents"
+                  href="/onboarding"
                   className="block w-full text-center px-4 py-3 rounded-lg bg-slate-900 text-white text-sm font-semibold"
                 >
                   Get Started

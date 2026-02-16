@@ -1,7 +1,93 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Play, Check } from "lucide-react";
+import { ArrowRight, Play, Check, Phone, Mic, Brain, Zap } from "lucide-react";
+
+/* ─── Animated voice waveform bars ─── */
+function VoiceWaveform() {
+  const bars = [
+    { h: 40, delay: 0 },
+    { h: 65, delay: 0.1 },
+    { h: 85, delay: 0.15 },
+    { h: 55, delay: 0.2 },
+    { h: 95, delay: 0.05 },
+    { h: 70, delay: 0.25 },
+    { h: 50, delay: 0.12 },
+    { h: 80, delay: 0.08 },
+    { h: 60, delay: 0.18 },
+    { h: 90, delay: 0.22 },
+    { h: 45, delay: 0.1 },
+    { h: 75, delay: 0.15 },
+    { h: 55, delay: 0.2 },
+    { h: 85, delay: 0.05 },
+    { h: 65, delay: 0.12 },
+    { h: 40, delay: 0.25 },
+    { h: 70, delay: 0.18 },
+    { h: 95, delay: 0.08 },
+    { h: 50, delay: 0.22 },
+    { h: 80, delay: 0.1 },
+  ];
+
+  return (
+    <div className="flex items-center justify-center gap-[3px]" style={{ height: 48 }}>
+      {bars.map((bar, i) => (
+        <motion.div
+          key={i}
+          className="w-[3px] rounded-full"
+          style={{
+            background: `linear-gradient(180deg, #8B5CF6, #635BFF)`,
+          }}
+          animate={{
+            height: [`${bar.h * 0.3}%`, `${bar.h}%`, `${bar.h * 0.4}%`, `${bar.h * 0.9}%`, `${bar.h * 0.3}%`],
+          }}
+          transition={{
+            duration: 1.8,
+            repeat: Infinity,
+            delay: bar.delay,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── Floating feature cards that orbit the hero ─── */
+function FloatingCard({
+  icon: Icon,
+  title,
+  subtitle,
+  gradient,
+  className,
+  delay,
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle: string;
+  gradient: string;
+  className?: string;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.6, delay }}
+      className={`absolute hidden lg:flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-2xl shadow-2xl ${className}`}
+    >
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
+        style={{ background: gradient }}
+      >
+        <Icon className="w-4 h-4 text-white" />
+      </div>
+      <div>
+        <div className="text-[13px] font-semibold text-white leading-tight">{title}</div>
+        <div className="text-[11px] text-white/40 leading-tight">{subtitle}</div>
+      </div>
+    </motion.div>
+  );
+}
 
 export function Hero() {
   return (
@@ -64,18 +150,18 @@ export function Hero() {
           className="mt-10 flex flex-col sm:flex-row gap-3 justify-center"
         >
           <a
-            href="/agents"
+            href="/onboarding"
             className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-white text-slate-900 font-semibold text-[15px] hover:bg-white/90 transition-all duration-300 shadow-xl shadow-white/10"
           >
             Get Started Free
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </a>
           <a
-            href="#agents"
+            href="#demo"
             className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl border border-white/10 text-white/70 font-medium text-[15px] hover:bg-white/5 hover:text-white transition-all duration-300"
           >
             <Play className="w-4 h-4" />
-            Meet the Agents
+            Watch Demo
           </a>
         </motion.div>
 
@@ -95,42 +181,124 @@ export function Hero() {
         </motion.div>
       </div>
 
-      {/* Hero product visual — floating browser mockup */}
+      {/* ─── Hero Visual: Voice AI Visualization ─── */}
       <motion.div
-        initial={{ opacity: 0, y: 60 }}
+        initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1, delay: 0.5 }}
-        className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 pb-24"
+        transition={{ duration: 0.8, delay: 0.6 }}
+        className="relative z-10 w-full max-w-3xl mx-auto px-4 sm:px-6 pb-28"
       >
-        <div className="relative rounded-2xl overflow-hidden border border-white/10 glow-purple">
-          {/* Browser bar */}
-          <div className="flex items-center gap-2 px-4 py-3 bg-white/5 border-b border-white/5">
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
+        {/* Central glass card with live waveform */}
+        <div className="relative">
+          <div
+            className="rounded-2xl p-8 sm:p-10 border border-white/[0.08] backdrop-blur-xl"
+            style={{
+              background: "linear-gradient(135deg, rgba(99,91,255,0.08), rgba(139,92,246,0.04), rgba(217,70,239,0.03))",
+            }}
+          >
+            {/* Status indicator */}
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-sm font-medium text-emerald-400/90 tracking-wide">
+                Agent Active — Listening
+              </span>
             </div>
-            <div className="flex-1 mx-12">
-              <div className="h-6 rounded-md bg-white/5 max-w-xs mx-auto flex items-center justify-center">
-                <span className="text-[11px] text-white/30">voiceai.com/builder</span>
-              </div>
+
+            {/* Waveform */}
+            <VoiceWaveform />
+
+            {/* Live conversation preview */}
+            <div className="mt-6 space-y-3">
+              <motion.div
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 1.0 }}
+                className="flex items-start gap-3"
+              >
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #635BFF, #8B5CF6)" }}>AI</div>
+                <div className="rounded-xl px-4 py-2.5 text-sm text-white/80 leading-relaxed" style={{ background: "rgba(99,91,255,0.1)", border: "1px solid rgba(99,91,255,0.15)" }}>
+                  &ldquo;Hi, this is Dr. Smith&apos;s office! I&apos;d be happy to help you schedule an appointment. What day works best for you?&rdquo;
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 1.4 }}
+                className="flex items-start gap-3 justify-end"
+              >
+                <div className="rounded-xl px-4 py-2.5 text-sm text-white/80 leading-relaxed" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  &ldquo;Do you have anything available this Thursday afternoon?&rdquo;
+                </div>
+                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white/60 flex-shrink-0">👤</div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 1.8 }}
+                className="flex items-start gap-3"
+              >
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #635BFF, #8B5CF6)" }}>AI</div>
+                <div className="rounded-xl px-4 py-2.5 text-sm text-white/80 leading-relaxed" style={{ background: "rgba(99,91,255,0.1)", border: "1px solid rgba(99,91,255,0.15)" }}>
+                  &ldquo;Thursday at 2:30 PM is available! I&apos;ll book that for you and send a confirmation text. Is there anything else I can help with?&rdquo;
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Bottom stats bar */}
+            <div className="mt-6 pt-5 border-t border-white/[0.06] flex items-center justify-center gap-6 sm:gap-10">
+              {[
+                { label: "Response Time", value: "0.8s" },
+                { label: "Confidence", value: "97%" },
+                { label: "Sentiment", value: "Positive" },
+              ].map((stat) => (
+                <div key={stat.label} className="text-center">
+                  <div className="text-xs text-white/30 mb-0.5">{stat.label}</div>
+                  <div className="text-sm font-semibold text-white/80">{stat.value}</div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Video / Product placeholder */}
-          <div className="aspect-[16/9] bg-gradient-to-b from-indigo-950/50 to-black flex items-center justify-center relative">
-            <div className="absolute inset-0 dot-grid opacity-50" />
-            <div className="relative flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-white/10 border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
-                <Play className="w-6 h-6 text-white/60 ml-0.5" />
-              </div>
-              <span className="text-sm text-white/30 font-medium">See the platform in action</span>
-            </div>
-          </div>
+          {/* Accent glow behind the card */}
+          <div className="absolute -inset-6 -z-10 rounded-3xl bg-indigo-500/[0.07] blur-[60px]" />
+          <div className="absolute -inset-10 -z-10 rounded-3xl bg-purple-500/[0.05] blur-[80px]" />
         </div>
 
-        {/* Glow underneath */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-indigo-500/10 blur-[80px] rounded-full" />
+        {/* Floating feature cards */}
+        <FloatingCard
+          icon={Brain}
+          title="Self-Learning AI"
+          subtitle="Improves every call"
+          gradient="linear-gradient(135deg, #635BFF, #8B5CF6)"
+          className="-left-12 top-[15%]"
+          delay={1.2}
+        />
+        <FloatingCard
+          icon={Mic}
+          title="1,000+ Voices"
+          subtitle="Sound exactly right"
+          gradient="linear-gradient(135deg, #D946EF, #F0ABFC)"
+          className="-right-12 top-[25%]"
+          delay={1.4}
+        />
+        <FloatingCard
+          icon={Phone}
+          title="20 Concurrent Calls"
+          subtitle="Handle any volume"
+          gradient="linear-gradient(135deg, #10B981, #34D399)"
+          className="-left-8 bottom-[15%]"
+          delay={1.6}
+        />
+        <FloatingCard
+          icon={Zap}
+          title="Live in 5 Minutes"
+          subtitle="No code required"
+          gradient="linear-gradient(135deg, #F59E0B, #FB923C)"
+          className="-right-8 bottom-[20%]"
+          delay={1.8}
+        />
       </motion.div>
     </section>
   );

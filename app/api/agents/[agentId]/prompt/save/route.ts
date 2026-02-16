@@ -1,6 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 
+/**
+ * Parses a compiled prompt into individual sections
+ * This ensures the AI Manager can work with clean, separated sections
+ */
+function parsePromptSections(compiledPrompt: string): {
+  role: string;
+  personality: string;
+  call_flow: string;
+  info_recap: string;
+  functions: any;
+  knowledge: string;
+} {
+  // Section markers
+  const roleMarker = '## 1. Role & Objective';
+  const personalityMarker = '## 2. Personality';
+  const callFlowMarker = '## 3. Call Flow';
+  const infoRecapMarker = '## 4. Information Recap';
+  const functionsMarker = '## 5. Function Reference';
+  const knowledgeMarker = '## 6. Knowledge Base Setup';
+
+  // Find section positions
+  const roleStart = compiledPrompt.indexOf(roleMarker);
+  const personalityStart = compiledPrompt.indexOf(personalityMarker);
+  const callFlowStart = compiledPrompt.indexOf(callFlowMarker);
+  const infoRecapStart = compiledPrompt.indexOf(infoRecapMarker);
+  const functionsStart = compiledPrompt.indexOf(functionsMarker);
+  const knowledgeStart = compiledPrompt.indexOf(knowledgeMarker);
+
+  // Extract sections (everything between markers)
+  const extractSection = (startPos: number, endPos: number): string => {
+    if (startPos === -1) return '';
+    const end = endPos !== -1 ? endPos : compiledPrompt.length;
+    return compiledPrompt.substring(startPos, end).trim();
+  };
+
+  const role = extractSection(roleStart, personalityStart);
+  const personality = extractSection(personalityStart, callFlowStart);
+  const call_flow = extractSection(callFlowStart, infoRecapStart);
+  const info_recap = extractSection(infoRecapStart, functionsStart);
+  const functions_text = extractSection(functionsStart, knowledgeStart);
+  const knowledge = extractSection(knowledgeStart, -1);
+
+  return {
+    role,
+    personality,
+    call_flow,
+    info_recap,
+    functions: functions_text,
+    knowledge
+  };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -38,13 +90,23 @@ export async function POST(
     const currentPrompt = agent.current_prompt;
     const newVersionNumber = currentPrompt.version_number + 1;
 
-    // Create new prompt version
+    // Parse the compiled prompt into sections
+    // This ensures AI Manager can work with individual sections later
+    const sections = parsePromptSections(compiledPrompt);
+
+    // Create new prompt version with ALL fields properly populated
     const { data: newVersion, error: versionError } = await supabase
       .from('prompt_versions')
       .insert({
         agent_id: agentId,
         version_number: newVersionNumber,
         compiled_prompt: compiledPrompt,
+        prompt_role: sections.role,
+        prompt_personality: sections.personality,
+        prompt_call_flow: sections.call_flow,
+        prompt_info_recap: sections.info_recap,
+        prompt_functions: sections.functions,
+        prompt_knowledge: sections.knowledge,
         generation_method: 'user_edited',
         parent_version_id: currentPrompt.id,
         change_summary: changeSummary || 'Manual edit',

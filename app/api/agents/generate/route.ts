@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = 'sk-ant-api03--sfVFORTPR86TQFzQKQ2EHr7pfV8sb96MX3EDAYe
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { businessName, businessType, description, website, location, callObjective, personalityTone } = body;
+    const { businessName, businessType, description, website, location, callObjective, personalityTone, dataCollectionFields } = body;
 
     // Validate required fields
     if (!businessName || !businessType || !description || !location || !callObjective) {
@@ -166,6 +166,45 @@ Please generate a complete voice agent prompt following the 6-section structure 
       .from('agents')
       .update({ current_prompt_id: promptVersion.id })
       .eq('id', agent.id);
+
+    // Create data collection config if fields were selected
+    if (dataCollectionFields && Array.isArray(dataCollectionFields) && dataCollectionFields.length > 0) {
+      const fieldLabelMap: Record<string, string> = {
+        'name': 'Customer Name',
+        'phone': 'Phone Number',
+        'email': 'Email Address',
+        'service_requested': 'Service Requested',
+        'address': 'Address',
+        'company': 'Company Name',
+        'preferred_contact_time': 'Preferred Contact Time',
+      };
+
+      const fields = dataCollectionFields.map((fieldId: string) => ({
+        id: fieldId,
+        type: fieldId === 'phone' ? 'phone' : fieldId === 'email' ? 'email' : 'text',
+        label: fieldLabelMap[fieldId] || fieldId,
+        required: ['name', 'phone', 'email'].includes(fieldId), // Mark common fields as required
+        enabled: true,
+        isCustom: false,
+      }));
+
+      await supabase
+        .from('agent_data_collection_configs')
+        .insert({
+          agent_id: agent.id,
+          fields,
+          retell_analysis_config: {
+            extract_fields: fields.map(f => ({
+              name: f.id,
+              label: f.label,
+              type: f.type,
+              required: f.required,
+            })),
+          },
+        });
+
+      console.log(`[generate] Created data collection config for agent ${agent.id} with ${fields.length} fields`);
+    }
 
     return NextResponse.json({
       success: true,
