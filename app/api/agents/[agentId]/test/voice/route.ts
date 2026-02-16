@@ -293,8 +293,28 @@ export async function POST(
       name: error.name,
       cause: error.cause
     });
+
+    // If there's a cause, log it deeply
+    if (error.cause) {
+      console.error('Error cause:', error.cause);
+      console.error('Cause details:', {
+        message: error.cause.message,
+        code: error.cause.code,
+        errno: error.cause.errno,
+        syscall: error.cause.syscall
+      });
+    }
+
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create voice test session', details: error.toString() },
+      {
+        success: false,
+        error: error.message || 'Failed to create voice test session',
+        details: error.toString(),
+        cause: error.cause ? {
+          message: error.cause.message,
+          code: error.cause.code
+        } : undefined
+      },
       { status: 500 }
     );
   }
