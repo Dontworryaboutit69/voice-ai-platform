@@ -38,8 +38,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Configure webhook URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
     const webhookUrl = `${appUrl}/api/webhooks/retell/call-events`;
 

@@ -95,8 +95,9 @@ export async function POST(
       .single();
 
     if (ghlIntegration && ghlIntegration.config?.calendar_id) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      // Use NEXT_PUBLIC_APP_URL (production domain) or fallback to localhost
+      // Never use VERCEL_URL as it points to preview deployments
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
       // Add calendar availability checking tool
       tools.push({
@@ -206,9 +207,9 @@ export async function POST(
       }
     }
 
-    // Configure webhook URL - use NEXT_PUBLIC_APP_URL if set, otherwise VERCEL_URL, fallback to localhost
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // Configure webhook URL - use NEXT_PUBLIC_APP_URL (production domain) or fallback to localhost
+    // Never use VERCEL_URL as it points to preview deployment URLs
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
     const agentConfig: any = {
       agent_name: agent.business_name,
