@@ -84,6 +84,100 @@ export async function POST(
       });
     }
 
+    // Check for active GoHighLevel integration and add calendar booking tool
+    const { data: ghlIntegration } = await supabase
+      .from('integration_connections')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('integration_type', 'gohighlevel')
+      .eq('is_active', true)
+      .single();
+
+    if (ghlIntegration && ghlIntegration.config?.calendar_id) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:3000';
+
+      // Add calendar availability checking tool
+      tools.push({
+        type: 'custom',
+        name: 'check_calendar_availability',
+        description: 'Check available appointment time slots for a specific date. Use this BEFORE booking an appointment to see what times are available.',
+        url: `${appUrl}/api/agents/${agentId}/check-availability`,
+        speak_on_send: false,
+        speak_during_execution: true,
+        execution_message_description: 'Checking available times',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description: 'Date to check availability for in YYYY-MM-DD format (e.g., 2026-02-20)'
+            },
+            timezone: {
+              type: 'string',
+              description: 'Timezone (default: America/New_York)',
+              default: 'America/New_York'
+            }
+          },
+          required: ['date']
+        }
+      });
+
+      // Add appointment booking tool
+      tools.push({
+        type: 'custom',
+        name: 'book_appointment',
+        description: 'Book an appointment in the calendar. Use this when the customer wants to schedule an appointment and you have collected their name, phone number, preferred date, and time.',
+        url: `${appUrl}/api/tools/book-appointment`,
+        speak_on_send: false,
+        speak_during_execution: true,
+        execution_message_description: 'Booking your appointment',
+        parameters: {
+          type: 'object',
+          properties: {
+            agent_id: {
+              type: 'string',
+              description: 'The agent ID (automatically provided)',
+              default: agentId
+            },
+            customer_name: {
+              type: 'string',
+              description: 'Full name of the customer'
+            },
+            customer_phone: {
+              type: 'string',
+              description: 'Phone number of the customer'
+            },
+            customer_email: {
+              type: 'string',
+              description: 'Email address of the customer (optional)'
+            },
+            appointment_date: {
+              type: 'string',
+              description: 'Date of appointment in YYYY-MM-DD format (e.g., 2026-02-20)'
+            },
+            appointment_time: {
+              type: 'string',
+              description: 'Time of appointment in HH:MM format using 24-hour time (e.g., 14:30 for 2:30 PM)'
+            },
+            duration_minutes: {
+              type: 'number',
+              description: 'Duration of appointment in minutes (default: 60)',
+              default: 60
+            },
+            notes: {
+              type: 'string',
+              description: 'Any additional notes or details about the appointment'
+            }
+          },
+          required: ['agent_id', 'customer_name', 'customer_phone', 'appointment_date', 'appointment_time']
+        }
+      });
+
+      console.log('[test/voice] Added GoHighLevel calendar tools (availability check + booking)');
+    }
+
     // First, create an LLM if needed
     let llmId = agent.retell_llm_id;
     if (!llmId) {
