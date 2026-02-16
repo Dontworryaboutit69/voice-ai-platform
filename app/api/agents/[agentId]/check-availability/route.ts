@@ -1,150 +1,157 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { GoHighLevelIntegration } from '@/lib/integrations/gohighlevel';
+import { createServiceClient } from '@/lib/supabase/client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-/**
- * POST /api/agents/[agentId]/check-availability
- * Check calendar availability for a given date
- *
- * This endpoint is called by the AI during conversations to check available appointment slots
- * before booking appointments with customers.
- *
- * Body:
- * {
- *   "date": "2024-03-20",
- *   "timezone": "America/New_York"
- * }
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
     const { agentId } = await params;
-    const { date, timezone } = await request.json();
+    const { date, timezone = 'America/New_York', execution_message } = await request.json();
 
-    if (!date) {
-      return NextResponse.json(
-        { success: false, error: 'Date is required (format: YYYY-MM-DD)' },
-        { status: 400 }
-      );
-    }
+    console.log(`[check-availability] Request for agent ${agentId}, date: ${date}, timezone: ${timezone}`);
 
-    // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid date format. Use YYYY-MM-DD' },
-        { status: 400 }
-      );
-    }
+    const supabase = createServiceClient();
 
-    // Get agent and check for active integration
-    const { data: agent, error: agentError } = await supabase
-      .from('agents')
-      .select(`
-        id,
-        name,
-        integration_connections!inner (
-          id,
-          integration_type,
-          credentials,
-          config,
-          is_active
-        )
-      `)
-      .eq('id', agentId)
-      .eq('integration_connections.is_active', true)
+    // Get active calendar integration for this agent
+    const { data: integration, error: integrationError } = await supabase
+      .from('integration_connections')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('is_active', true)
+      .or('integration_type.eq.gohighlevel,integration_type.eq.google_calendar')
       .single();
 
-    if (agentError || !agent) {
-      return NextResponse.json(
-        { success: false, error: 'Agent not found' },
-        { status: 404 }
-      );
+    if (integrationError || !integration) {
+      console.error('[check-availability] No active calendar integration found:', integrationError);
+      return NextResponse.json({
+        error: 'No calendar integration configured',
+        message: 'I apologize, but I'\''m unable to access the calendar right now. Please call our office directly to schedule.'
+      }, { status: 400 });
     }
 
-    // Find calendar integration (GoHighLevel, Google Calendar, or Calendly)
-    const calendarConnection = (agent.integration_connections as any[]).find(
-      (conn: any) => ['gohighlevel', 'google-calendar', 'calendly'].includes(conn.integration_type)
+    console.log(`[check-availability] Found ${integration.integration_type} integration`);
+
+    // Route to appropriate calendar provider
+    if (integration.integration_type === 'gohighlevel') {
+      return await checkGHLAvailability(integration, date, timezone);
+    } else if (integration.integration_type === 'google_calendar') {
+      return await checkGoogleCalendarAvailability(integration, date, timezone);
+    }
+
+    return NextResponse.json({
+      error: 'Unsupported calendar type',
+      message: 'I apologize, but I'\''m unable to access the calendar right now.'
+    }, { status: 400 });
+
+  } catch (error: any) {
+    console.error('[check-availability] Error:', error);
+    return NextResponse.json({
+      error: error.message || 'Failed to check availability',
+      message: 'I apologize, but I'\''m having trouble checking the calendar right now. Let me take down your information and have someone call you back to schedule.'
+    }, { status: 500 });
+  }
+}
+
+async function checkGHLAvailability(integration: any, date: string, timezone: string) {
+  try {
+    const { calendar_id, location_id } = integration.config || {};
+
+    if (!calendar_id || !location_id) {
+      console.error('[check-availability] Missing calendar_id or location_id in config');
+      return NextResponse.json({
+        error: 'Calendar not configured',
+        message: 'I apologize, but the calendar isn'\''t fully set up yet. Please contact our office directly.'
+      }, { status: 400 });
+    }
+
+    console.log(`[check-availability] Checking GHL calendar ${calendar_id} for date ${date}`);
+
+    // Call GoHighLevel Calendar API to get free slots
+    const response = await fetch(
+      `https://services.leadconnectorhq.com/calendars/${calendar_id}/free-slots?startDate=${date}&endDate=${date}&timezone=${encodeURIComponent(timezone)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${integration.api_key}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
+        }
+      }
     );
 
-    if (!calendarConnection) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'No active calendar integration found',
-          message: 'Please connect a calendar integration (GoHighLevel, Google Calendar, or Calendly) to check availability'
-        },
-        { status: 400 }
-      );
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[check-availability] GHL API error:', response.status, errorText);
+
+      return NextResponse.json({
+        error: 'Failed to fetch calendar slots',
+        message: 'I'\''m having trouble accessing the calendar right now. Let me take your information and have our scheduler call you back within an hour to confirm your appointment.'
+      }, { status: response.status });
     }
 
-    // Check if calendar is configured
-    if (calendarConnection.integration_type === 'gohighlevel' && !calendarConnection.config?.calendar_id) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Calendar not configured',
-          message: 'Please select a calendar in your GoHighLevel integration settings'
-        },
-        { status: 400 }
-      );
-    }
+    const data = await response.json();
+    console.log(`[check-availability] GHL response:`, JSON.stringify(data, null, 2));
 
-    // Check availability based on integration type
-    let availableSlots: string[] = [];
-
-    if (calendarConnection.integration_type === 'gohighlevel') {
-      const ghl = new GoHighLevelIntegration({
-        ...calendarConnection.credentials,
-        config: calendarConnection.config
+    // Format the available slots for the agent
+    if (!data.slots || data.slots.length === 0) {
+      return NextResponse.json({
+        available: false,
+        slots: [],
+        message: `I don'\''t see any available times on ${date}. Would another day work better for you?`
       });
-
-      const result = await ghl.checkAvailability(date, timezone || 'America/New_York');
-
-      if (!result.success) {
-        return NextResponse.json(
-          { success: false, error: result.error || 'Failed to check availability' },
-          { status: 400 }
-        );
-      }
-
-      availableSlots = result.data?.availableSlots || [];
-    } else {
-      // For other calendar types, return a message
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Availability checking not yet implemented for this calendar type',
-          message: `Availability checking for ${calendarConnection.integration_type} is coming soon`
-        },
-        { status: 501 }
-      );
     }
 
-    // Format response for AI
+    // Extract just the times for easier communication
+    const availableTimes = data.slots.map((slot: any) => {
+      const time = new Date(slot.startTime);
+      return time.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: timezone
+      });
+    });
+
     return NextResponse.json({
-      success: true,
+      available: true,
       date,
-      timezone: timezone || 'America/New_York',
-      available_slots: availableSlots,
-      total_slots: availableSlots.length,
-      message: availableSlots.length > 0
-        ? `Found ${availableSlots.length} available time slots on ${date}`
-        : `No available time slots on ${date}. Please try a different date.`
+      timezone,
+      slots: availableTimes,
+      raw_slots: data.slots,
+      message: `I have the following times available on ${new Date(date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
+      })}: ${availableTimes.slice(0, 5).join(', ')}${availableTimes.length > 5 ? `, and ${availableTimes.length - 5} more times` : ''}.`
     });
 
   } catch (error: any) {
-    console.error('Error checking availability:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[check-availability] GHL error:', error);
+    return NextResponse.json({
+      error: error.message,
+      message: 'I'\''m having trouble checking availability right now. Let me take your information and I'\''ll have our scheduler call you back within the hour.'
+    }, { status: 500 });
+  }
+}
+
+async function checkGoogleCalendarAvailability(integration: any, date: string, timezone: string) {
+  try {
+    // TODO: Implement Google Calendar availability checking
+    // Will need to use Google Calendar API with the stored access/refresh tokens
+
+    console.log('[check-availability] Google Calendar not yet implemented');
+
+    return NextResponse.json({
+      error: 'Google Calendar integration coming soon',
+      message: 'I apologize, but I'\''m unable to access the Google Calendar right now. Let me take your information and have someone call you back to schedule.'
+    }, { status: 501 });
+
+  } catch (error: any) {
+    console.error('[check-availability] Google Calendar error:', error);
+    return NextResponse.json({
+      error: error.message,
+      message: 'I'\''m having trouble checking availability right now.'
+    }, { status: 500 });
   }
 }

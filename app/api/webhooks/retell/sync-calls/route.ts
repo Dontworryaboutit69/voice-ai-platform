@@ -7,7 +7,7 @@ const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 // Manual sync endpoint to fetch calls from Retell and sync to database
 export async function POST(request: NextRequest) {
   try {
-    console.log('[sync-calls] Starting sync - version 4.0 (fixed timestamp conversion)');
+    console.log('[sync-calls] Starting sync - version 5.0 (with integration sync)');
     const { agentId } = await request.json();
 
     if (!agentId) {
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     let syncedCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
+    const callsToSync: string[] = []; // Track calls that need integration sync
 
     console.log(`[sync-calls] Processing ${callsList.length} calls from Retell API`);
 
@@ -115,21 +116,39 @@ export async function POST(request: NextRequest) {
         } else {
           updatedCount++;
           console.log(`[sync-calls] Successfully updated call ${call.call_id}`);
+          // Track for integration sync
+          if (normalizedStatus === 'completed' && call.transcript) {
+            callsToSync.push(existingCall.id);
+          }
         }
       } else {
         // Insert new call
         console.log(`[sync-calls] Inserting new call ${call.call_id}`);
-        const { error: insertError } = await supabase
+        const { data: newCall, error: insertError } = await supabase
           .from('calls')
-          .insert(callData);
+          .insert(callData)
+          .select('id')
+          .single();
 
         if (insertError) {
           console.error(`[sync-calls] Insert error for ${call.call_id}:`, insertError);
         } else {
           syncedCount++;
           console.log(`[sync-calls] Successfully inserted call ${call.call_id}`);
+          // Track for integration sync
+          if (newCall && normalizedStatus === 'completed' && call.transcript) {
+            callsToSync.push(newCall.id);
+          }
         }
       }
+    }
+
+    // Sync completed calls to integrations (async, don't wait)
+    if (callsToSync.length > 0) {
+      console.log(`[sync-calls] Triggering integration sync for ${callsToSync.length} completed calls`);
+      syncCallsToIntegrations(callsToSync, agentId).catch(error => {
+        console.error('[sync-calls] Integration sync error (non-blocking):', error);
+      });
     }
 
     return NextResponse.json({
@@ -148,4 +167,126 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Sync calls to CRM integrations (async, non-blocking)
+ */
+async function syncCallsToIntegrations(callIds: string[], agentId: string) {
+  try {
+    console.log('[sync-calls] Syncing calls to integrations:', callIds);
+
+    const supabase = createServiceClient();
+
+    for (const callId of callIds) {
+      // Get call details
+      const { data: call } = await supabase
+        .from('calls')
+        .select('*')
+        .eq('id', callId)
+        .single();
+
+      if (!call || !call.transcript_object) {
+        console.log('[sync-calls] Skipping call without transcript:', callId);
+        continue;
+      }
+
+      // Analyze call to extract customer data (same logic as call-events webhook)
+      const outcome = analyzeCallTranscript(call.transcript_object);
+
+      // Build call data for integrations
+      const integrationCallData = {
+        callId: call.id,
+        agentId: agentId,
+        customerName: outcome.customerName,
+        customerPhone: outcome.customerPhone,
+        customerEmail: outcome.customerEmail,
+        callOutcome: outcome.type,
+        callSummary: `Call with ${outcome.customerName || 'customer'}. ${outcome.reason || outcome.service || 'No additional details.'}`,
+        callSentiment: 'neutral',
+        transcript: call.transcript,
+        recordingUrl: call.recording_url,
+        startedAt: new Date(call.started_at),
+        endedAt: call.ended_at ? new Date(call.ended_at) : new Date(),
+        durationSeconds: call.duration_ms ? Math.floor(call.duration_ms / 1000) : 0,
+      };
+
+      // Import integration factory
+      const { processCallThroughIntegrations } = await import('@/lib/integrations/integration-factory');
+
+      // Process through all connected integrations
+      await processCallThroughIntegrations(agentId, integrationCallData);
+
+      console.log('[sync-calls] ✅ Synced call to integrations:', callId);
+    }
+  } catch (error: any) {
+    console.error('[sync-calls] Integration sync error:', error);
+  }
+}
+
+/**
+ * Simplified transcript analysis (mirrors logic in call-events webhook)
+ */
+function analyzeCallTranscript(transcript: any): {
+  type: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  reason?: string;
+  service?: string;
+} {
+  let customerName: string | undefined;
+  let customerPhone: string | undefined;
+  let customerEmail: string | undefined;
+  let reason: string | undefined;
+
+  if (!Array.isArray(transcript)) {
+    return { type: 'other' };
+  }
+
+  for (let i = 0; i < transcript.length; i++) {
+    const turn = transcript[i];
+    const content = turn.content?.toLowerCase() || '';
+    const userContent = turn.role === 'user' ? (turn.content || '') : '';
+
+    // Extract name
+    if (!customerName && turn.role === 'user') {
+      if (content.includes('my name is') || content.includes("i'm ")) {
+        const cleaned = userContent
+          .replace(/my name is /i, '')
+          .replace(/i'm /i, '')
+          .replace(/this is /i, '')
+          .trim();
+        const words = cleaned.split(/\s+/).slice(0, 3);
+        if (words.length > 0 && words[0].length > 1) {
+          customerName = words.join(' ');
+        }
+      }
+    }
+
+    // Extract phone
+    if (!customerPhone && turn.role === 'user') {
+      const phoneMatch = userContent.match(/(\+?1?\s*\(?[\d]{3}\)?[\s.-]?[\d]{3}[\s.-]?[\d]{4})/);
+      if (phoneMatch) customerPhone = phoneMatch[1].trim();
+    }
+
+    // Extract email
+    if (!customerEmail && turn.role === 'user') {
+      const emailMatch = userContent.match(/[\w.-]+@[\w.-]+\.\w+/);
+      if (emailMatch) customerEmail = emailMatch[0].trim();
+    }
+
+    // Extract reason (from early user messages)
+    if (!reason && i < 3 && turn.role === 'user' && userContent.length > 10) {
+      reason = userContent.substring(0, 100);
+    }
+  }
+
+  return {
+    type: customerName && customerPhone ? 'message_taken' : 'other',
+    customerName,
+    customerPhone,
+    customerEmail,
+    reason,
+  };
 }
