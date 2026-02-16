@@ -286,8 +286,14 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Error creating voice test session:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      cause: error.cause
+    });
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create voice test session' },
+      { success: false, error: error.message || 'Failed to create voice test session', details: error.toString() },
       { status: 500 }
     );
   }
