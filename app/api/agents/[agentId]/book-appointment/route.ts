@@ -8,13 +8,13 @@ export async function POST(
   try {
     const { agentId } = await params;
     const body = await request.json();
-    const { contactId, date, time, timezone = 'America/New_York', title, notes } = body;
+    const { contactId: providedContactId, date, time, timezone = 'America/New_York', title, notes, caller_name, caller_phone, caller_email } = body;
 
-    console.log(`[book-appointment] Booking for agent ${agentId}:`, { contactId, date, time, timezone });
+    console.log(`[book-appointment] Booking for agent ${agentId}:`, { providedContactId, date, time, timezone, caller_name, caller_phone });
 
-    if (!contactId || !date || !time) {
+    if (!date || !time) {
       return NextResponse.json(
-        { success: false, error: 'contactId, date, and time are required' },
+        { success: false, error: 'date and time are required' },
         { status: 400 }
       );
     }
@@ -63,6 +63,41 @@ export async function POST(
         const { GoHighLevelIntegration } = await import('@/lib/integrations/gohighlevel');
         const ghl = new GoHighLevelIntegration(integration);
 
+        // If no contactId provided, create or find the contact first
+        let contactId = providedContactId;
+        if (!contactId) {
+          if (!caller_name && !caller_phone && !caller_email) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Either contactId or caller info (caller_name, caller_phone) is required'
+              },
+              { status: 200 }
+            );
+          }
+
+          console.log(`[book-appointment] No contactId — creating/finding contact in GHL`);
+          const contactResult = await ghl.getOrCreateContact({
+            name: caller_name,
+            phone: caller_phone,
+            email: caller_email,
+          });
+
+          if (!contactResult.success || !contactResult.data) {
+            console.error('[book-appointment] Failed to create/find contact:', contactResult.error);
+            return NextResponse.json(
+              {
+                success: false,
+                error: contactResult.error || 'Failed to create contact in CRM'
+              },
+              { status: 200 }
+            );
+          }
+
+          contactId = contactResult.data.contactId;
+          console.log(`[book-appointment] Contact ready: ${contactId}`);
+        }
+
         const result = await ghl.bookAppointment({
           contactId,
           date,
@@ -89,6 +124,7 @@ export async function POST(
         return NextResponse.json({
           success: true,
           appointmentId: result.data?.appointmentId,
+          contactId,
           date,
           time,
           timezone

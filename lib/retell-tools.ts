@@ -64,18 +64,67 @@ export function getCheckAvailabilityTool(agentId: string): RetellCustomTool {
 }
 
 /**
+ * Generate book appointment tool for an agent
+ */
+export function getBookAppointmentTool(agentId: string): RetellCustomTool {
+  return {
+    type: 'function',
+    function: {
+      name: 'book_appointment',
+      description: 'Book an appointment for the caller. You MUST first check availability using check_calendar_availability before booking. Collects the caller\'s name and phone number, then books the selected time slot.',
+      parameters: {
+        type: 'object',
+        properties: {
+          caller_name: {
+            type: 'string',
+            description: 'The full name of the caller (e.g., "John Smith")'
+          },
+          caller_phone: {
+            type: 'string',
+            description: 'The caller\'s phone number (e.g., "+15551234567" or "555-123-4567")'
+          },
+          caller_email: {
+            type: 'string',
+            description: 'The caller\'s email address (optional)'
+          },
+          date: {
+            type: 'string',
+            description: 'The appointment date in YYYY-MM-DD format (e.g., 2026-02-20)'
+          },
+          time: {
+            type: 'string',
+            description: 'The appointment time in HH:MM 24-hour format (e.g., 14:00 for 2:00 PM)'
+          },
+          timezone: {
+            type: 'string',
+            description: 'Timezone (e.g., America/New_York). Defaults to America/New_York if not specified.'
+          }
+        },
+        required: ['caller_name', 'caller_phone', 'date', 'time']
+      },
+      async: true,
+      speak_on_send: false,
+      speak_during_execution: true,
+      execution_message_description: 'Booking your appointment now',
+      url: `${getAppUrl()}/api/agents/${agentId}/book-appointment`
+    }
+  };
+}
+
+/**
  * Get all custom tools for an agent based on their active integrations
  */
 export async function getAgentCustomTools(agentId: string, integrations: string[]): Promise<RetellCustomTool[]> {
   const tools: RetellCustomTool[] = [];
 
-  // Add calendar availability check if agent has any calendar integration
+  // Add calendar tools if agent has any calendar integration
   const hasCalendarIntegration = integrations.some(type =>
     ['gohighlevel', 'google-calendar', 'calendly'].includes(type)
   );
 
   if (hasCalendarIntegration) {
     tools.push(getCheckAvailabilityTool(agentId));
+    tools.push(getBookAppointmentTool(agentId));
   }
 
   return tools;
