@@ -190,10 +190,16 @@ export async function POST(
       llmId = llm.llm_id;
 
       // Save LLM ID to database
-      await supabase
+      const { error: dbError } = await supabase
         .from('agents')
         .update({ retell_llm_id: llmId })
         .eq('id', agentId);
+
+      if (dbError) {
+        console.error('[test/voice] ❌ Failed to save retell_llm_id to database:', dbError);
+      } else {
+        console.log('[test/voice] ✅ Saved retell_llm_id to database:', llmId);
+      }
     } else {
       // Update the LLM with the latest prompt, model, and tools
       try {
@@ -214,10 +220,16 @@ export async function POST(
         llmId = llm.llm_id;
 
         // Save new LLM ID to database
-        await supabase
+        const { error: dbError } = await supabase
           .from('agents')
           .update({ retell_llm_id: llmId })
           .eq('id', agentId);
+
+        if (dbError) {
+          console.error('[test/voice] ❌ Failed to save retell_llm_id to database:', dbError);
+        } else {
+          console.log('[test/voice] ✅ Saved retell_llm_id to database:', llmId);
+        }
         console.log(`[test/voice] ✅ Created new LLM ${llmId} with ${tools.length} tools`);
       }
     }
@@ -251,10 +263,16 @@ export async function POST(
         retellAgentId = newAgent.agent_id;
 
         // Update database with new agent ID
-        await supabase
+        const { error: dbError } = await supabase
           .from('agents')
           .update({ retell_agent_id: retellAgentId })
           .eq('id', agentId);
+
+        if (dbError) {
+          console.error('[test/voice] ❌ Failed to save retell_agent_id to database:', dbError);
+        } else {
+          console.log('[test/voice] ✅ Saved retell_agent_id to database:', retellAgentId);
+        }
       }
     } else {
       // Create new Retell agent
@@ -262,10 +280,16 @@ export async function POST(
       retellAgentId = newAgent.agent_id;
 
       // Save agent ID to database
-      await supabase
+      const { error: dbError } = await supabase
         .from('agents')
         .update({ retell_agent_id: retellAgentId })
         .eq('id', agentId);
+
+      if (dbError) {
+        console.error('[test/voice] ❌ Failed to save retell_agent_id to database:', dbError);
+      } else {
+        console.log('[test/voice] ✅ Saved retell_agent_id to database:', retellAgentId);
+      }
     }
 
     // Verify the update worked
