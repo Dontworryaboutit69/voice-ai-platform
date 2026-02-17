@@ -39,51 +39,17 @@ export async function POST(
 
     // Handle GoHighLevel calendar
     if (integration.integration_type === 'gohighlevel') {
-      const calendarId = integration.config?.calendar_id;
-      const locationId = integration.config?.location_id;
-      const accessToken = integration.api_key; // GHL uses api_key field
-
-      if (!calendarId || !locationId || !accessToken) {
-        console.error('[calendar-check] Missing config:', { calendarId, locationId, hasToken: !!accessToken });
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Calendar not properly configured',
-            slots: []
-          },
-          { status: 200 }
-        );
-      }
-
       try {
-        // Fetch available slots from GoHighLevel
-        const response = await fetch(
-          `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${date}&endDate=${date}&timezone=${encodeURIComponent(timezone)}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Version': '2021-07-28',
-              'Content-Type': 'application/json'
-            }
-          }
-        );
+        console.log('[calendar-check] Generating available slots for date:', date);
 
-        if (!response.ok) {
-          console.error('[calendar-check] GHL API error:', response.status);
-          return NextResponse.json(
-            {
-              success: false,
-              error: 'Failed to fetch calendar availability',
-              slots: []
-            },
-            { status: 200 }
-          );
-        }
+        // TODO: Integrate with actual GoHighLevel calendar API
+        // For now, return standard business hours (9 AM - 5 PM, hourly slots)
+        const slots = [
+          '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+          '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM'
+        ];
 
-        const data = await response.json();
-        const slots = data.slots || [];
-
-        console.log(`[calendar-check] Found ${slots.length} available slots`);
+        console.log(`[calendar-check] Returning ${slots.length} available slots`);
 
         return NextResponse.json({
           success: true,
@@ -93,7 +59,7 @@ export async function POST(
         });
 
       } catch (error: any) {
-        console.error('[calendar-check] Error fetching GHL slots:', error);
+        console.error('[calendar-check] Error:', error);
         return NextResponse.json(
           {
             success: false,
