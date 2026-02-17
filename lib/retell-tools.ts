@@ -43,11 +43,6 @@ export function getCheckAvailabilityTool(agentId: string): RetellCustomTool {
       parameters: {
         type: 'object',
         properties: {
-          agentId: {
-            type: 'string',
-            description: 'The agent ID (auto-filled)',
-            default: agentId
-          },
           date: {
             type: 'string',
             description: 'The date to check availability for, in YYYY-MM-DD format (e.g., 2024-03-20)'
@@ -63,7 +58,7 @@ export function getCheckAvailabilityTool(agentId: string): RetellCustomTool {
       speak_on_send: false,
       speak_during_execution: true,
       execution_message_description: 'Checking available time slots',
-      url: `${getAppUrl()}/api/calendar-availability`
+      url: `${getAppUrl()}/api/agents/${agentId}/calendar-check`
     }
   };
 }
