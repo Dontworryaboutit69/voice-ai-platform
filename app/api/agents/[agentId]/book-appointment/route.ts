@@ -8,7 +8,16 @@ export async function POST(
   try {
     const { agentId } = await params;
     const body = await request.json();
-    const { contactId: providedContactId, date, time, timezone = 'America/New_York', title, notes, caller_name, caller_phone, caller_email } = body;
+    // Accept both naming conventions (Retell tool sends customer_*, our API uses caller_*)
+    const providedContactId = body.contactId;
+    const date = body.date || body.appointment_date;
+    const time = body.time || body.appointment_time;
+    const timezone = body.timezone || 'America/New_York';
+    const title = body.title;
+    const notes = body.notes;
+    const caller_name = body.caller_name || body.customer_name;
+    const caller_phone = body.caller_phone || body.customer_phone;
+    const caller_email = body.caller_email || body.customer_email;
 
     console.log(`[book-appointment] Booking for agent ${agentId}:`, { providedContactId, date, time, timezone, caller_name, caller_phone });
 
