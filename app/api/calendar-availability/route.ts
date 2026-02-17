@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 
 export async function POST(request: NextRequest) {
-  console.log('[calendar-availability] POST request received');
+  console.log('[calendar-availability] POST request received - PRODUCTION');
   try {
     const body = await request.json();
     const { agentId, date, timezone = 'America/New_York' } = body;
