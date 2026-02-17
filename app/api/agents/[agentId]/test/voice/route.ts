@@ -104,7 +104,7 @@ export async function POST(
         type: 'custom',
         name: 'check_calendar_availability',
         description: 'Check available appointment time slots for a specific date. Use this BEFORE booking an appointment to see what times are available.',
-        url: `${appUrl}/api/agents/${agentId}/check-availability`,
+        url: `${appUrl}/api/agents/${agentId}/calendar-check`,
         speak_on_send: false,
         speak_during_execution: true,
         execution_message_description: 'Checking available times',
