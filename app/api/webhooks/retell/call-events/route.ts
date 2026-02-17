@@ -172,8 +172,13 @@ async function handleCallEnded(
   // ------------------------------------------------------------------
   // 5. CRM Integration Sync (async to not block webhook)
   // ------------------------------------------------------------------
+  console.log('[call_ended] Triggering integration sync for call:', updatedCall.id);
   syncToIntegrationsAsync(updatedCall.id, agentId, callData).catch((error: unknown) => {
-    console.error('[CRM Integrations] Sync failed:', error);
+    console.error('[CRM Integrations] ❌ Sync failed in catch:', {
+      callId: updatedCall.id,
+      agentId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     // Don't throw - webhook should succeed even if integration sync fails
   });
 }
@@ -564,7 +569,13 @@ async function syncToIntegrationsAsync(
     console.log('[CRM Integrations] ✅ Sync complete for call:', callId);
 
   } catch (error: any) {
-    console.error('[CRM Integrations] Sync error:', error);
+    console.error('[CRM Integrations] ❌ Sync error:', {
+      message: error?.message,
+      stack: error?.stack,
+      callId,
+      agentId,
+      error: JSON.stringify(error, Object.getOwnPropertyNames(error))
+    });
     // Don't throw - let webhook succeed even if integration sync fails
   }
 }
