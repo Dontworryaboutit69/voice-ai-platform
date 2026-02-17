@@ -7,7 +7,7 @@
 import { BaseIntegration, IntegrationResponse, ContactData, AppointmentData, NoteData, IntegrationType } from './base-integration';
 
 export class GoHighLevelIntegration extends BaseIntegration {
-  private baseUrl = 'https://rest.gohighlevel.com/v1';
+  private baseUrlV2 = 'https://services.leadconnectorhq.com';
   private apiKey: string;
   private locationId: string;
 
@@ -35,7 +35,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
   async validateConnection(): Promise<IntegrationResponse<boolean>> {
     try {
-      const response = await fetch(`${this.baseUrl}/locations/${this.locationId}`, {
+      const response = await fetch(`${this.baseUrlV2}/locations/${this.locationId}`, {
         headers: this.getHeaders(),
       });
 
@@ -82,7 +82,9 @@ export class GoHighLevelIntegration extends BaseIntegration {
         payload.customField = mappedFields;
       }
 
-      const response = await fetch(`${this.baseUrl}/contacts/`, {
+      console.log('[GHL] Creating contact via v2:', JSON.stringify(payload, null, 2));
+
+      const response = await fetch(`${this.baseUrlV2}/contacts/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -91,7 +93,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[GHL] Create contact failed:', response.status, errorText.substring(0, 300));
-        throw new Error(`GHL API error: ${response.statusText}`);
+        throw new Error(`GHL API error ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
       const result = await response.json();
@@ -125,7 +127,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
         );
       }
 
-      const response = await fetch(`${this.baseUrl}/contacts/${contactId}`, {
+      const response = await fetch(`${this.baseUrlV2}/contacts/${contactId}`, {
         method: 'PUT',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -145,37 +147,49 @@ export class GoHighLevelIntegration extends BaseIntegration {
     try {
       await this.rateLimit();
 
-      let query = `locationId=${this.locationId}`;
-
-      if (email) {
-        query += `&email=${encodeURIComponent(email)}`;
-      } else if (phone) {
-        const normalizedPhone = phone.replace(/\D/g, '');
-        query += `&phone=${encodeURIComponent(normalizedPhone)}`;
-      } else {
+      if (!email && !phone) {
         return { success: true, data: null };
       }
 
-      const response = await fetch(`${this.baseUrl}/contacts/?${query}`, {
+      // Try v2 search endpoint
+      let searchUrl = `${this.baseUrlV2}/contacts/?locationId=${this.locationId}`;
+
+      if (email) {
+        searchUrl += `&query=${encodeURIComponent(email)}`;
+      } else if (phone) {
+        const normalizedPhone = phone.replace(/\D/g, '');
+        searchUrl += `&query=${encodeURIComponent(normalizedPhone)}`;
+      }
+
+      console.log('[GHL] Finding contact via v2:', searchUrl);
+
+      const response = await fetch(searchUrl, {
         headers: this.getHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`GHL API error: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('[GHL] Find contact failed:', response.status, errorText.substring(0, 300));
+        // Don't throw — just return null so getOrCreateContact can create
+        return { success: true, data: null };
       }
 
       const result = await response.json();
 
       if (result.contacts && result.contacts.length > 0) {
+        console.log(`[GHL] Found existing contact: ${result.contacts[0].id}`);
         return {
           success: true,
           data: { contactId: result.contacts[0].id }
         };
       }
 
+      console.log('[GHL] No existing contact found');
       return { success: true, data: null };
     } catch (error: any) {
-      return this.handleError(error, 'findContact');
+      // Don't fail hard — return null so we can still create
+      console.error('[GHL] findContact error (will try create):', error.message);
+      return { success: true, data: null };
     }
   }
 
@@ -191,7 +205,9 @@ export class GoHighLevelIntegration extends BaseIntegration {
         userId: this.connection.config?.user_id || undefined,
       };
 
-      const response = await fetch(`${this.baseUrl}/contacts/${data.contactId}/notes/`, {
+      console.log('[GHL] Adding note via v2 for contact:', data.contactId);
+
+      const response = await fetch(`${this.baseUrlV2}/contacts/${data.contactId}/notes`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -200,14 +216,14 @@ export class GoHighLevelIntegration extends BaseIntegration {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[GHL] Add note failed:', response.status, errorText.substring(0, 300));
-        throw new Error(`GHL API error: ${response.statusText}`);
+        throw new Error(`GHL API error ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
       const result = await response.json();
 
       return {
         success: true,
-        data: { noteId: result.id }
+        data: { noteId: result.id || result.note?.id || 'created' }
       };
     } catch (error: any) {
       return this.handleError(error, 'addNote');
@@ -274,26 +290,26 @@ export class GoHighLevelIntegration extends BaseIntegration {
         const startOfDay = new Date(`${date}T00:00:00`);
         const endOfDay = new Date(`${date}T23:59:59`);
 
-        // Try different v1 parameter formats
-        const v1Urls = [
-          `${this.baseUrl}/appointments/?calendarId=${calendarId}&startDate=${startOfDay.getTime()}&endDate=${endOfDay.getTime()}`,
-          `${this.baseUrl}/appointments/?calendarId=${calendarId}&startDate=${date}&endDate=${date}`,
+        // Try v2 appointments list endpoint with different date formats
+        const v2Urls = [
+          `${this.baseUrlV2}/calendars/events?locationId=${this.locationId}&calendarId=${calendarId}&startTime=${startOfDay.getTime()}&endTime=${endOfDay.getTime()}`,
+          `${this.baseUrlV2}/calendars/events?locationId=${this.locationId}&calendarId=${calendarId}&startTime=${date}&endTime=${date}`,
         ];
 
         let bookedAppointments: any[] = [];
         let v1Success = false;
 
-        for (const v1Url of v1Urls) {
-          console.log('[GHL] Trying v1:', v1Url);
-          const v1Response = await fetch(v1Url, { headers: this.getHeaders() });
-          if (v1Response.ok) {
-            const v1Result = await v1Response.json();
-            bookedAppointments = v1Result.appointments || [];
+        for (const v2Url of v2Urls) {
+          console.log('[GHL] Trying v2 events list:', v2Url);
+          const v2Response = await fetch(v2Url, { headers: this.getHeaders() });
+          if (v2Response.ok) {
+            const v2Result = await v2Response.json();
+            bookedAppointments = v2Result.events || v2Result.appointments || [];
             v1Success = true;
-            console.log(`[GHL] v1 returned ${bookedAppointments.length} existing appointments`);
+            console.log(`[GHL] v2 events returned ${bookedAppointments.length} existing appointments`);
             break;
           } else {
-            console.log(`[GHL] v1 attempt failed: ${v1Response.status}`);
+            console.log(`[GHL] v2 events attempt failed: ${v2Response.status}`);
           }
         }
 
@@ -354,22 +370,30 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Build ISO start time
+      // Build ISO start time with timezone awareness
       const startDateTime = new Date(`${data.date}T${data.time}:00`).toISOString();
+      const endDateTime = new Date(
+        new Date(`${data.date}T${data.time}:00`).getTime() + (data.durationMinutes || 30) * 60000
+      ).toISOString();
 
       const payload = {
         calendarId,
         locationId: this.locationId,
         contactId: data.contactId,
         startTime: startDateTime,
-        title: data.title,
+        endTime: endDateTime,
+        title: data.title || 'Phone Consultation',
         appointmentStatus: 'confirmed',
-        notes: data.description || '',
+        assignedUserId: this.connection.config?.assigned_user_id || undefined,
+        notes: data.description || 'Booked via AI voice agent',
       };
 
-      console.log('[GHL] Booking appointment with payload:', JSON.stringify(payload, null, 2));
+      // Remove undefined values
+      Object.keys(payload).forEach(key => (payload as any)[key] === undefined && delete (payload as any)[key]);
 
-      const response = await fetch(`${this.baseUrl}/appointments/`, {
+      console.log('[GHL] Booking appointment via v2:', JSON.stringify(payload, null, 2));
+
+      const response = await fetch(`${this.baseUrlV2}/calendars/events/appointments`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -382,14 +406,15 @@ export class GoHighLevelIntegration extends BaseIntegration {
           statusText: response.statusText,
           error: errorText.substring(0, 500)
         });
-        throw new Error(`GHL API error: ${response.statusText} - ${errorText.substring(0, 200)}`);
+        throw new Error(`GHL API error ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
       const result = await response.json();
+      console.log('[GHL] Appointment booked successfully:', result.id || result.event?.id);
 
       return {
         success: true,
-        data: { appointmentId: result.id }
+        data: { appointmentId: result.id || result.event?.id || 'booked' }
       };
     } catch (error: any) {
       return this.handleError(error, 'bookAppointment');
@@ -408,7 +433,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
         eventData: data || {},
       };
 
-      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/subscribe`, {
+      const response = await fetch(`${this.baseUrlV2}/workflows/${workflowId}/subscribe`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -431,7 +456,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       await this.rateLimit();
 
       const response = await fetch(
-        `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
+        `${this.baseUrlV2}/calendars/?locationId=${this.locationId}`,
         { headers: this.getHeaders() }
       );
 
@@ -459,7 +484,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       await this.rateLimit();
 
       const response = await fetch(
-        `${this.baseUrl}/opportunities/pipelines?locationId=${this.locationId}`,
+        `${this.baseUrlV2}/opportunities/pipelines?locationId=${this.locationId}`,
         { headers: this.getHeaders() }
       );
 
@@ -483,7 +508,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       await this.rateLimit();
 
       const response = await fetch(
-        `${this.baseUrl}/opportunities/pipelines/${pipelineId}`,
+        `${this.baseUrlV2}/opportunities/pipelines/${pipelineId}`,
         { headers: this.getHeaders() }
       );
 
@@ -507,7 +532,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       await this.rateLimit();
 
       const response = await fetch(
-        `${this.baseUrl}/workflows/?locationId=${this.locationId}`,
+        `${this.baseUrlV2}/workflows/?locationId=${this.locationId}`,
         { headers: this.getHeaders() }
       );
 
@@ -543,7 +568,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
         payload.pipelineStageId = stageId;
       }
 
-      const response = await fetch(`${this.baseUrl}/opportunities/`, {
+      const response = await fetch(`${this.baseUrlV2}/opportunities/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),

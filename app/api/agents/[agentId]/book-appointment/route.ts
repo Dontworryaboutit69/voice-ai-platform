@@ -28,6 +28,17 @@ export async function POST(
       );
     }
 
+    // Validate date is not in the past
+    const requestedDate = new Date(`${date}T${time}:00`);
+    const now = new Date();
+    if (requestedDate < now) {
+      console.log(`[book-appointment] Rejecting past date/time: ${date} ${time}`);
+      return NextResponse.json(
+        { success: false, error: `Cannot book in the past. ${date} ${time} has already passed.` },
+        { status: 200 }
+      );
+    }
+
     const supabase = createServiceClient();
 
     // Get active calendar integration (GoHighLevel or Google Calendar)

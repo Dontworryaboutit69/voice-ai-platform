@@ -12,6 +12,21 @@ export async function POST(
 
     console.log(`[calendar-check] Checking availability for agent ${agentId}, date: ${date}`);
 
+    // Validate date is not in the past
+    if (date) {
+      const requestedDate = new Date(date + 'T23:59:59');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (requestedDate < today) {
+        console.log(`[calendar-check] Rejecting past date: ${date}`);
+        return NextResponse.json({
+          success: false,
+          error: `The date ${date} is in the past. Please provide a future date.`,
+          slots: []
+        }, { status: 200 });
+      }
+    }
+
     const supabase = createServiceClient();
 
     // Get active calendar integration
