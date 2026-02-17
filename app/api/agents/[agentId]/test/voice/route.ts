@@ -202,8 +202,23 @@ export async function POST(
           model: selectedModel,
           general_tools: tools
         });
+        console.log(`[test/voice] ✅ Updated LLM ${llmId} with ${tools.length} tools`);
       } catch (error) {
-        console.error('Failed to update LLM:', error);
+        console.error('[test/voice] ❌ Failed to update LLM, creating new one:', error);
+        // If update fails, create a new LLM
+        const llm = await retell.llm.create({
+          general_prompt: promptToUse,
+          model: selectedModel,
+          general_tools: tools
+        });
+        llmId = llm.llm_id;
+
+        // Save new LLM ID to database
+        await supabase
+          .from('agents')
+          .update({ retell_llm_id: llmId })
+          .eq('id', agentId);
+        console.log(`[test/voice] ✅ Created new LLM ${llmId} with ${tools.length} tools`);
       }
     }
 
