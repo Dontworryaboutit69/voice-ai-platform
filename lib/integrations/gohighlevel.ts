@@ -1,13 +1,13 @@
 /**
  * GoHighLevel (GHL) Integration
- * API Key authentication
+ * Uses v2 API (services.leadconnectorhq.com)
  * Full CRM capabilities: contacts, notes, appointments, workflows
  */
 
 import { BaseIntegration, IntegrationResponse, ContactData, AppointmentData, NoteData, IntegrationType } from './base-integration';
 
 export class GoHighLevelIntegration extends BaseIntegration {
-  private baseUrl = 'https://rest.gohighlevel.com/v1';
+  private baseUrl = 'https://services.leadconnectorhq.com';
   private apiKey: string;
   private locationId: string;
 
@@ -29,7 +29,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
     return {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
-      'Version': '2021-07-28',
+      'Version': '2021-04-15',
     };
   }
 
@@ -63,11 +63,15 @@ export class GoHighLevelIntegration extends BaseIntegration {
         locationId: this.locationId,
         firstName: data.firstName || data.name?.split(' ')[0] || '',
         lastName: data.lastName || data.name?.split(' ').slice(1).join(' ') || '',
-        email: data.email || '',
-        phone: data.phone || '',
-        address1: data.address || '',
-        companyName: data.company || '',
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+        address1: data.address || undefined,
+        companyName: data.company || undefined,
+        source: 'AI Voice Agent',
       };
+
+      // Remove undefined values
+      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
 
       // Add custom fields if configured
       if (data.customFields && this.connection.config?.field_mappings) {
@@ -85,6 +89,8 @@ export class GoHighLevelIntegration extends BaseIntegration {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[GHL] Create contact failed:', response.status, errorText.substring(0, 300));
         throw new Error(`GHL API error: ${response.statusText}`);
       }
 
@@ -139,32 +145,51 @@ export class GoHighLevelIntegration extends BaseIntegration {
     try {
       await this.rateLimit();
 
+      // Use the v2 duplicate search endpoint
       let query = `locationId=${this.locationId}`;
 
       if (email) {
         query += `&email=${encodeURIComponent(email)}`;
-      } else if (phone) {
-        // Normalize phone for search
+      }
+      if (phone) {
         const normalizedPhone = phone.replace(/\D/g, '');
         query += `&phone=${encodeURIComponent(normalizedPhone)}`;
-      } else {
+      }
+
+      if (!email && !phone) {
         return { success: true, data: null };
       }
 
-      const response = await fetch(`${this.baseUrl}/contacts/?${query}`, {
+      const response = await fetch(`${this.baseUrl}/contacts/search/duplicate?${query}`, {
         headers: this.getHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`GHL API error: ${response.statusText}`);
+        // If duplicate search fails, try regular contacts search
+        const fallbackResponse = await fetch(`${this.baseUrl}/contacts/?${query}&limit=1`, {
+          headers: this.getHeaders(),
+        });
+
+        if (!fallbackResponse.ok) {
+          throw new Error(`GHL API error: ${fallbackResponse.statusText}`);
+        }
+
+        const fallbackResult = await fallbackResponse.json();
+        if (fallbackResult.contacts && fallbackResult.contacts.length > 0) {
+          return {
+            success: true,
+            data: { contactId: fallbackResult.contacts[0].id }
+          };
+        }
+        return { success: true, data: null };
       }
 
       const result = await response.json();
 
-      if (result.contacts && result.contacts.length > 0) {
+      if (result.contact && result.contact.id) {
         return {
           success: true,
-          data: { contactId: result.contacts[0].id }
+          data: { contactId: result.contact.id }
         };
       }
 
@@ -183,7 +208,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       const payload = {
         contactId: data.contactId,
         body: data.content,
-        userId: this.connection.config?.user_id || undefined, // Optional: assign to specific user
+        userId: this.connection.config?.user_id || undefined,
       };
 
       const response = await fetch(`${this.baseUrl}/contacts/${data.contactId}/notes/`, {
@@ -193,6 +218,8 @@ export class GoHighLevelIntegration extends BaseIntegration {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[GHL] Add note failed:', response.status, errorText.substring(0, 300));
         throw new Error(`GHL API error: ${response.statusText}`);
       }
 
@@ -223,57 +250,73 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Get appointments for the day
+      // Use v2 free-slots endpoint
+      // startDate and endDate as epoch milliseconds
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
 
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const response = await fetch(
-        `${this.baseUrl}/appointments/?calendarId=${calendarId}&startTime=${startOfDay.getTime()}&endTime=${endOfDay.getTime()}`,
-        { headers: this.getHeaders() }
-      );
+      const url = `${this.baseUrl}/calendars/${calendarId}/free-slots?startDate=${startOfDay.getTime()}&endDate=${endOfDay.getTime()}${timezone ? `&timezone=${encodeURIComponent(timezone)}` : ''}`;
+
+      console.log('[GHL] Checking free slots:', url);
+
+      const response = await fetch(url, {
+        headers: this.getHeaders(),
+      });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[GHL] Free slots failed:', response.status, errorText.substring(0, 500));
         throw new Error(`GHL API error: ${response.statusText}`);
       }
 
       const result = await response.json();
-      const bookedAppointments = result.appointments || [];
+      console.log('[GHL] Free slots response keys:', Object.keys(result));
 
-      // Define business hours
-      const businessStart = this.connection.config?.business_hours_start || 9;
-      const businessEnd = this.connection.config?.business_hours_end || 17;
-      const slotDuration = this.connection.config?.slot_duration_minutes || 60;
+      // v2 free-slots returns: { "{date}": { "slots": ["2026-02-18T09:00:00-05:00", ...] } }
+      // or { "slots": { "{date}": ["2026-02-18T09:00:00-05:00", ...] } }
+      let rawSlots: string[] = [];
 
-      // Generate all slots
-      const allSlots: string[] = [];
-      for (let hour = businessStart; hour < businessEnd; hour++) {
-        for (let minute = 0; minute < 60; minute += slotDuration) {
-          allSlots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+      if (result[date] && result[date].slots) {
+        rawSlots = result[date].slots;
+      } else if (result.slots) {
+        // Try different response format
+        if (Array.isArray(result.slots)) {
+          rawSlots = result.slots;
+        } else if (typeof result.slots === 'object') {
+          // slots might be keyed by date
+          const dateKey = Object.keys(result.slots).find(k => k.startsWith(date));
+          if (dateKey) {
+            rawSlots = result.slots[dateKey];
+          }
+        }
+      } else {
+        // Try to find slots in any date key
+        for (const key of Object.keys(result)) {
+          if (key.startsWith(date) || key === date) {
+            const val = result[key];
+            if (Array.isArray(val)) {
+              rawSlots = val;
+            } else if (val && val.slots) {
+              rawSlots = val.slots;
+            }
+            break;
+          }
         }
       }
 
-      // Filter booked slots
-      const availableSlots = allSlots.filter(slot => {
-        const [hour, minute] = slot.split(':').map(Number);
-        const slotStart = new Date(date);
-        slotStart.setHours(hour, minute, 0, 0);
+      console.log(`[GHL] Found ${rawSlots.length} raw slots`);
 
-        const slotEnd = new Date(slotStart);
-        slotEnd.setMinutes(slotEnd.getMinutes() + slotDuration);
-
-        return !bookedAppointments.some((apt: any) => {
-          const aptStart = new Date(apt.startTime);
-          const aptEnd = new Date(apt.endTime);
-
-          return (
-            (slotStart >= aptStart && slotStart < aptEnd) ||
-            (slotEnd > aptStart && slotEnd <= aptEnd) ||
-            (slotStart <= aptStart && slotEnd >= aptEnd)
-          );
-        });
+      // Extract HH:MM from the ISO datetime strings
+      const availableSlots = rawSlots.map(slot => {
+        // slot is like "2026-02-18T09:00:00-05:00"
+        const match = slot.match(/T(\d{2}):(\d{2})/);
+        if (match) {
+          return `${match[1]}:${match[2]}`;
+        }
+        return slot;
       });
 
       return {
@@ -299,76 +342,14 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Parse date and time
-      // GHL requires RFC3339 format with timezone offset (e.g., 2026-02-12T13:42:44-05:00)
-
-      // Calculate actual timezone offset for the specific date/time
-      // This handles DST automatically
-      const getTimezoneOffset = (dateStr: string, timeStr: string, tz: string): string => {
-        try {
-          // Create date string in the target timezone
-          const dateTimeStr = `${dateStr}T${timeStr}:00`;
-          const date = new Date(dateTimeStr + 'Z'); // Parse as UTC first
-
-          // Format in target timezone and extract offset
-          const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: tz,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZoneName: 'longOffset'
-          });
-
-          const parts = formatter.formatToParts(date);
-          const offsetPart = parts.find(p => p.type === 'timeZoneName');
-
-          if (offsetPart && offsetPart.value) {
-            // Extract offset from format like "GMT-05:00"
-            const match = offsetPart.value.match(/GMT([+-]\d{2}):(\d{2})/);
-            if (match) {
-              return `${match[1]}:${match[2]}`;
-            }
-          }
-        } catch (e) {
-          console.error('[GHL] Error calculating timezone offset:', e);
-        }
-
-        // Fallback to static offsets if dynamic calculation fails
-        const staticOffsets: Record<string, string> = {
-          'America/New_York': '-05:00',
-          'America/Chicago': '-06:00',
-          'America/Denver': '-07:00',
-          'America/Los_Angeles': '-08:00',
-          'UTC': '+00:00'
-        };
-        return staticOffsets[tz] || '-05:00';
-      };
-
-      const tzOffset = getTimezoneOffset(data.date, data.time, data.timezone);
-
-      // Format start time: YYYY-MM-DDTHH:MM:SS+TZ
-      const selectedSlot = `${data.date}T${data.time}:00${tzOffset}`;
-
-      // Calculate end time (add duration to start time)
-      const [hour, minute] = data.time.split(':').map(Number);
-      const endMinutes = minute + data.durationMinutes;
-      const endHour = hour + Math.floor(endMinutes / 60);
-      const endMinute = endMinutes % 60;
-
-      // Format end time
-      const endTimeFormatted = `${data.date}T${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}:00${tzOffset}`;
+      // Build ISO start time
+      const startDateTime = new Date(`${data.date}T${data.time}:00`).toISOString();
 
       const payload = {
         calendarId,
+        locationId: this.locationId,
         contactId: data.contactId,
-        selectedTimezone: data.timezone,
-        selectedSlot: selectedSlot,
-        startTime: selectedSlot,
-        endTime: endTimeFormatted,
+        startTime: startDateTime,
         title: data.title,
         appointmentStatus: 'confirmed',
         notes: data.description || '',
@@ -376,7 +357,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       console.log('[GHL] Booking appointment with payload:', JSON.stringify(payload, null, 2));
 
-      const response = await fetch(`${this.baseUrl}/appointments/`, {
+      const response = await fetch(`${this.baseUrl}/calendars/events/appointments`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
@@ -387,7 +368,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
         console.error('[GHL] Appointment booking failed:', {
           status: response.status,
           statusText: response.statusText,
-          payload,
           error: errorText.substring(0, 500)
         });
         throw new Error(`GHL API error: ${response.statusText} - ${errorText.substring(0, 200)}`);
@@ -434,52 +414,26 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
   // ==================== Calendar Management ====================
 
-  /**
-   * Fetch all calendars for the location
-   */
   async getCalendars(): Promise<IntegrationResponse<any[]>> {
     try {
       await this.rateLimit();
 
-      // Try the calendar services endpoint first (more reliable)
       const response = await fetch(
-        `${this.baseUrl}/calendars/services?locationId=${this.locationId}`,
+        `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
         { headers: this.getHeaders() }
       );
 
       if (!response.ok) {
-        // If services endpoint fails, try the regular calendars endpoint
-        console.log(`[GHL] Services endpoint failed (${response.status}), trying calendars endpoint...`);
-
-        const fallbackResponse = await fetch(
-          `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
-          { headers: this.getHeaders() }
-        );
-
-        if (!fallbackResponse.ok) {
-          const errorText = await fallbackResponse.text();
-          console.error('[GHL] Both calendar endpoints failed:', {
-            status: fallbackResponse.status,
-            error: errorText.substring(0, 200)
-          });
-          throw new Error(`GHL API error: ${fallbackResponse.statusText}`);
-        }
-
-        const fallbackResult = await fallbackResponse.json();
-        return {
-          success: true,
-          data: fallbackResult.calendars || []
-        };
+        const errorText = await response.text();
+        console.error('[GHL] Get calendars failed:', response.status, errorText.substring(0, 200));
+        throw new Error(`GHL API error: ${response.statusText}`);
       }
 
       const result = await response.json();
 
-      // Services endpoint returns 'services' instead of 'calendars'
-      const calendars = result.services || result.calendars || [];
-
       return {
         success: true,
-        data: calendars
+        data: result.calendars || []
       };
     } catch (error: any) {
       return this.handleError(error, 'getCalendars');
@@ -488,9 +442,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
   // ==================== Pipeline Management ====================
 
-  /**
-   * Fetch all pipelines for the location
-   */
   async getPipelines(): Promise<IntegrationResponse<any[]>> {
     try {
       await this.rateLimit();
@@ -515,9 +466,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
     }
   }
 
-  /**
-   * Fetch stages for a specific pipeline
-   */
   async getPipelineStages(pipelineId: string): Promise<IntegrationResponse<any[]>> {
     try {
       await this.rateLimit();
@@ -542,9 +490,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
     }
   }
 
-  /**
-   * Fetch all workflows for the location
-   */
   async getWorkflows(): Promise<IntegrationResponse<any[]>> {
     try {
       await this.rateLimit();
@@ -569,9 +514,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
     }
   }
 
-  /**
-   * Add contact to pipeline/opportunity
-   */
   async addToPipeline(contactId: string, pipelineId: string, stageId?: string, value?: number): Promise<IntegrationResponse<{ opportunityId: string }>> {
     try {
       await this.rateLimit();
@@ -585,7 +527,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
         monetaryValue: value || 0,
       };
 
-      // Only add stage if provided
       if (stageId) {
         payload.pipelineStageId = stageId;
       }
@@ -615,7 +556,6 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
   protected async rateLimit(): Promise<void> {
     // GHL has rate limits: 100 requests per 10 seconds
-    // Simple delay to avoid hitting limits
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 }
