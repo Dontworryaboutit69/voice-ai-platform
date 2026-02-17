@@ -370,18 +370,21 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Build ISO start time with timezone awareness
+      // Build ISO start time
       const startDateTime = new Date(`${data.date}T${data.time}:00`).toISOString();
       const endDateTime = new Date(
         new Date(`${data.date}T${data.time}:00`).getTime() + (data.durationMinutes || 30) * 60000
       ).toISOString();
 
-      const payload = {
+      // GHL v2 appointment payload — includes both startTime/endTime and selectedSlot/selectedTimezone
+      const payload: any = {
         calendarId,
         locationId: this.locationId,
         contactId: data.contactId,
         startTime: startDateTime,
         endTime: endDateTime,
+        selectedTimezone: data.timezone || 'America/New_York',
+        selectedSlot: startDateTime,
         title: data.title || 'Phone Consultation',
         appointmentStatus: 'confirmed',
         assignedUserId: this.connection.config?.assigned_user_id || undefined,
@@ -389,7 +392,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       };
 
       // Remove undefined values
-      Object.keys(payload).forEach(key => (payload as any)[key] === undefined && delete (payload as any)[key]);
+      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
 
       console.log('[GHL] Booking appointment via v2:', JSON.stringify(payload, null, 2));
 
