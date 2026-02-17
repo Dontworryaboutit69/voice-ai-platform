@@ -7,7 +7,7 @@
 import { BaseIntegration, IntegrationResponse, ContactData, AppointmentData, NoteData, IntegrationType } from './base-integration';
 
 export class GoHighLevelIntegration extends BaseIntegration {
-  private baseUrl = 'https://services.leadconnectorhq.com';
+  private baseUrl = 'https://rest.gohighlevel.com/v1';
   private apiKey: string;
   private locationId: string;
 
@@ -29,7 +29,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
     return {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
-      'Version': '2021-04-15',
+      'Version': '2021-07-28',
     };
   }
 
@@ -145,51 +145,31 @@ export class GoHighLevelIntegration extends BaseIntegration {
     try {
       await this.rateLimit();
 
-      // Use the v2 duplicate search endpoint
       let query = `locationId=${this.locationId}`;
 
       if (email) {
         query += `&email=${encodeURIComponent(email)}`;
-      }
-      if (phone) {
+      } else if (phone) {
         const normalizedPhone = phone.replace(/\D/g, '');
         query += `&phone=${encodeURIComponent(normalizedPhone)}`;
-      }
-
-      if (!email && !phone) {
+      } else {
         return { success: true, data: null };
       }
 
-      const response = await fetch(`${this.baseUrl}/contacts/search/duplicate?${query}`, {
+      const response = await fetch(`${this.baseUrl}/contacts/?${query}`, {
         headers: this.getHeaders(),
       });
 
       if (!response.ok) {
-        // If duplicate search fails, try regular contacts search
-        const fallbackResponse = await fetch(`${this.baseUrl}/contacts/?${query}&limit=1`, {
-          headers: this.getHeaders(),
-        });
-
-        if (!fallbackResponse.ok) {
-          throw new Error(`GHL API error: ${fallbackResponse.statusText}`);
-        }
-
-        const fallbackResult = await fallbackResponse.json();
-        if (fallbackResult.contacts && fallbackResult.contacts.length > 0) {
-          return {
-            success: true,
-            data: { contactId: fallbackResult.contacts[0].id }
-          };
-        }
-        return { success: true, data: null };
+        throw new Error(`GHL API error: ${response.statusText}`);
       }
 
       const result = await response.json();
 
-      if (result.contact && result.contact.id) {
+      if (result.contacts && result.contacts.length > 0) {
         return {
           success: true,
-          data: { contactId: result.contact.id }
+          data: { contactId: result.contacts[0].id }
         };
       }
 
@@ -250,74 +230,106 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Use v2 free-slots endpoint
-      // startDate and endDate as epoch milliseconds
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
+      // Try v2 free-slots endpoint first (works if token supports it)
+      // Then fall back to v1 appointments listing
+      let availableSlots: string[] = [];
 
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Attempt 1: Try the free-slots endpoint via leadconnectorhq (v2)
+      const freeSlotsUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${date}&endDate=${date}${timezone ? `&timezone=${encodeURIComponent(timezone)}` : ''}`;
+      console.log('[GHL] Trying v2 free-slots:', freeSlotsUrl);
 
-      const url = `${this.baseUrl}/calendars/${calendarId}/free-slots?startDate=${startOfDay.getTime()}&endDate=${endOfDay.getTime()}${timezone ? `&timezone=${encodeURIComponent(timezone)}` : ''}`;
-
-      console.log('[GHL] Checking free slots:', url);
-
-      const response = await fetch(url, {
+      const freeSlotsResponse = await fetch(freeSlotsUrl, {
         headers: this.getHeaders(),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[GHL] Free slots failed:', response.status, errorText.substring(0, 500));
-        throw new Error(`GHL API error: ${response.statusText}`);
-      }
+      if (freeSlotsResponse.ok) {
+        const result = await freeSlotsResponse.json();
+        console.log('[GHL] Free slots response keys:', Object.keys(result));
 
-      const result = await response.json();
-      console.log('[GHL] Free slots response keys:', Object.keys(result));
-
-      // v2 free-slots returns: { "{date}": { "slots": ["2026-02-18T09:00:00-05:00", ...] } }
-      // or { "slots": { "{date}": ["2026-02-18T09:00:00-05:00", ...] } }
-      let rawSlots: string[] = [];
-
-      if (result[date] && result[date].slots) {
-        rawSlots = result[date].slots;
-      } else if (result.slots) {
-        // Try different response format
-        if (Array.isArray(result.slots)) {
+        // Parse slots from response — format varies
+        let rawSlots: string[] = [];
+        if (result[date] && Array.isArray(result[date].slots)) {
+          rawSlots = result[date].slots;
+        } else if (result.slots && Array.isArray(result.slots)) {
           rawSlots = result.slots;
-        } else if (typeof result.slots === 'object') {
-          // slots might be keyed by date
-          const dateKey = Object.keys(result.slots).find(k => k.startsWith(date));
-          if (dateKey) {
-            rawSlots = result.slots[dateKey];
-          }
-        }
-      } else {
-        // Try to find slots in any date key
-        for (const key of Object.keys(result)) {
-          if (key.startsWith(date) || key === date) {
+        } else {
+          // Try any date key in response
+          for (const key of Object.keys(result)) {
             const val = result[key];
-            if (Array.isArray(val)) {
-              rawSlots = val;
-            } else if (val && val.slots) {
-              rawSlots = val.slots;
-            }
-            break;
+            if (Array.isArray(val?.slots)) { rawSlots = val.slots; break; }
+            if (Array.isArray(val)) { rawSlots = val; break; }
           }
         }
-      }
 
-      console.log(`[GHL] Found ${rawSlots.length} raw slots`);
+        availableSlots = rawSlots.map(slot => {
+          const match = slot.match(/T(\d{2}):(\d{2})/);
+          return match ? `${match[1]}:${match[2]}` : slot;
+        });
 
-      // Extract HH:MM from the ISO datetime strings
-      const availableSlots = rawSlots.map(slot => {
-        // slot is like "2026-02-18T09:00:00-05:00"
-        const match = slot.match(/T(\d{2}):(\d{2})/);
-        if (match) {
-          return `${match[1]}:${match[2]}`;
+        console.log(`[GHL] v2 free-slots returned ${availableSlots.length} slots`);
+      } else {
+        // Attempt 2: Fall back to v1 — list appointments and compute available slots
+        console.log(`[GHL] v2 free-slots failed (${freeSlotsResponse.status}), falling back to v1 approach`);
+
+        const startOfDay = new Date(`${date}T00:00:00`);
+        const endOfDay = new Date(`${date}T23:59:59`);
+
+        // Try different v1 parameter formats
+        const v1Urls = [
+          `${this.baseUrl}/appointments/?calendarId=${calendarId}&startDate=${startOfDay.getTime()}&endDate=${endOfDay.getTime()}`,
+          `${this.baseUrl}/appointments/?calendarId=${calendarId}&startDate=${date}&endDate=${date}`,
+        ];
+
+        let bookedAppointments: any[] = [];
+        let v1Success = false;
+
+        for (const v1Url of v1Urls) {
+          console.log('[GHL] Trying v1:', v1Url);
+          const v1Response = await fetch(v1Url, { headers: this.getHeaders() });
+          if (v1Response.ok) {
+            const v1Result = await v1Response.json();
+            bookedAppointments = v1Result.appointments || [];
+            v1Success = true;
+            console.log(`[GHL] v1 returned ${bookedAppointments.length} existing appointments`);
+            break;
+          } else {
+            console.log(`[GHL] v1 attempt failed: ${v1Response.status}`);
+          }
         }
-        return slot;
-      });
+
+        // Generate business hours slots and filter out booked ones
+        const businessStart = this.connection.config?.business_hours_start || 9;
+        const businessEnd = this.connection.config?.business_hours_end || 17;
+        const slotDuration = this.connection.config?.slot_duration_minutes || 60;
+
+        const allSlots: string[] = [];
+        for (let hour = businessStart; hour < businessEnd; hour++) {
+          for (let minute = 0; minute < 60; minute += slotDuration) {
+            allSlots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+          }
+        }
+
+        if (v1Success && bookedAppointments.length > 0) {
+          availableSlots = allSlots.filter(slot => {
+            const [h, m] = slot.split(':').map(Number);
+            const slotStart = new Date(`${date}T${slot}:00`);
+            const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
+            return !bookedAppointments.some((apt: any) => {
+              const aptStart = new Date(apt.startTime || apt.start_time);
+              const aptEnd = new Date(apt.endTime || apt.end_time || aptStart.getTime() + 3600000);
+              return slotStart < aptEnd && slotEnd > aptStart;
+            });
+          });
+        } else {
+          // If we couldn't fetch appointments at all, return all business hours
+          availableSlots = allSlots;
+          if (!v1Success) {
+            console.log('[GHL] Could not fetch appointments — returning all business hours as available');
+          }
+        }
+
+        console.log(`[GHL] Computed ${availableSlots.length} available slots from ${allSlots.length} total`);
+      }
 
       return {
         success: true,
@@ -357,7 +369,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       console.log('[GHL] Booking appointment with payload:', JSON.stringify(payload, null, 2));
 
-      const response = await fetch(`${this.baseUrl}/calendars/events/appointments`, {
+      const response = await fetch(`${this.baseUrl}/appointments/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
