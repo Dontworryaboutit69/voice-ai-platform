@@ -30,7 +30,7 @@ export async function POST(
       console.error('[check-availability] No active calendar integration found:', integrationError);
       return NextResponse.json({
         error: 'No calendar integration configured',
-        message: 'I apologize, but I'\''m unable to access the calendar right now. Please call our office directly to schedule.'
+        message: "I apologize, but I'm unable to access the calendar right now. Please call our office directly to schedule."
       }, { status: 400 });
     }
 
@@ -45,14 +45,14 @@ export async function POST(
 
     return NextResponse.json({
       error: 'Unsupported calendar type',
-      message: 'I apologize, but I'\''m unable to access the calendar right now.'
+      message: "I apologize, but I'm unable to access the calendar right now."
     }, { status: 400 });
 
   } catch (error: any) {
     console.error('[check-availability] Error:', error);
     return NextResponse.json({
       error: error.message || 'Failed to check availability',
-      message: 'I apologize, but I'\''m having trouble checking the calendar right now. Let me take down your information and have someone call you back to schedule.'
+       message: "I apologize, but I'm having trouble checking the calendar right now. Let me take down your information and have someone call you back to schedule."
     }, { status: 500 });
   }
 }
@@ -65,7 +65,7 @@ async function checkGHLAvailability(integration: any, date: string, timezone: st
       console.error('[check-availability] Missing calendar_id or location_id in config');
       return NextResponse.json({
         error: 'Calendar not configured',
-        message: 'I apologize, but the calendar isn'\''t fully set up yet. Please contact our office directly.'
+         message: "I apologize, but the calendar isn't fully set up yet. Please contact our office directly."
       }, { status: 400 });
     }
 
@@ -90,7 +90,7 @@ async function checkGHLAvailability(integration: any, date: string, timezone: st
 
       return NextResponse.json({
         error: 'Failed to fetch calendar slots',
-        message: 'I'\''m having trouble accessing the calendar right now. Let me take your information and have our scheduler call you back within an hour to confirm your appointment.'
+         message: "I'm having trouble accessing the calendar right now. Let me take your information and have our scheduler call you back within an hour to confirm your appointment."
       }, { status: response.status });
     }
 
@@ -102,7 +102,7 @@ async function checkGHLAvailability(integration: any, date: string, timezone: st
       return NextResponse.json({
         available: false,
         slots: [],
-        message: `I don'\''t see any available times on ${date}. Would another day work better for you?`
+        message: `I don't see any available times on ${date}. Would another day work better for you?`
       });
     }
 
@@ -134,7 +134,7 @@ async function checkGHLAvailability(integration: any, date: string, timezone: st
     console.error('[check-availability] GHL error:', error);
     return NextResponse.json({
       error: error.message,
-      message: 'I'\''m having trouble checking availability right now. Let me take your information and I'\''ll have our scheduler call you back within the hour.'
+      message: "I'm having trouble checking availability right now. Let me take your information and I'll have our scheduler call you back within the hour."
     }, { status: 500 });
   }
 }
@@ -148,14 +148,14 @@ async function checkGoogleCalendarAvailability(integration: any, date: string, t
 
     return NextResponse.json({
       error: 'Google Calendar integration coming soon',
-      message: 'I apologize, but I'\''m unable to access the Google Calendar right now. Let me take your information and have someone call you back to schedule.'
+       message: "I apologize, but I'm unable to access the Google Calendar right now. Let me take your information and have someone call you back to schedule."
     }, { status: 501 });
 
   } catch (error: any) {
     console.error('[check-availability] Google Calendar error:', error);
     return NextResponse.json({
       error: error.message,
-      message: 'I'\''m having trouble checking availability right now.'
+       message: "I'm having trouble checking availability right now."
     }, { status: 500 });
   }
 }

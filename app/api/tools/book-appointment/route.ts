@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       console.error('[book-appointment] No active calendar integration found:', integrationError);
       return NextResponse.json({
         error: 'No calendar integration configured',
-        message: 'I'\''ve taken down your information. Our office manager will call you within the hour to confirm your appointment.'
+        message: "I've taken down your information. Our office manager will call you within the hour to confirm your appointment."
       }, { status: 400 });
     }
 
@@ -69,14 +69,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       error: 'Unsupported calendar type',
-      message: 'I'\''ve taken down your information. Our office will call you back to confirm the appointment.'
+      message: "I've taken down your information. Our office will call you back to confirm the appointment."
     }, { status: 400 });
 
   } catch (error: any) {
     console.error('[book-appointment] Error:', error);
     return NextResponse.json({
       error: error.message || 'Failed to book appointment',
-      message: 'I'\''ve noted your appointment request. Our office manager will call you within the hour to confirm everything.'
+      message: "I've noted your appointment request. Our office manager will call you within the hour to confirm everything."
     }, { status: 500 });
   }
 }
@@ -98,7 +98,7 @@ async function bookGHLAppointment(
       console.error('[book-appointment] Missing calendar_id or location_id in config');
       return NextResponse.json({
         error: 'Calendar not configured',
-        message: 'I'\''ve taken your information. Our office manager will call you to confirm the appointment.'
+        message: "I've taken your information. Our office manager will call you to confirm the appointment."
       }, { status: 400 });
     }
 
@@ -198,7 +198,7 @@ async function bookGHLAppointment(
 
       return NextResponse.json({
         error: 'Failed to book appointment',
-        message: 'I'\''ve saved your contact information in our system. Our office manager will call you within the hour to finalize your appointment.'
+        message: "I've saved your contact information in our system. Our office manager will call you within the hour to finalize your appointment."
       }, { status: appointmentResponse.status });
     }
 
@@ -222,14 +222,14 @@ async function bookGHLAppointment(
       success: true,
       appointment_id: appointmentData.id,
       contact_id: contactId,
-      message: `Perfect! I'\''ve booked your appointment for ${formattedDate} at ${formattedTime}. You'\''ll receive a confirmation via ${customer_email ? 'email' : 'text'}. Is there anything else I can help you with?`
+      message: `Perfect! I've booked your appointment for ${formattedDate} at ${formattedTime}. You'll receive a confirmation via ${customer_email ? 'email' : 'text'}. Is there anything else I can help you with?`
     });
 
   } catch (error: any) {
     console.error('[book-appointment] GHL error:', error);
     return NextResponse.json({
       error: error.message,
-      message: 'I'\''ve taken down all your information. Our office manager will call you within the hour to confirm your appointment.'
+      message: "I've taken down all your information. Our office manager will call you within the hour to confirm your appointment."
     }, { status: 500 });
   }
 }
@@ -252,14 +252,14 @@ async function bookGoogleCalendarAppointment(
 
     return NextResponse.json({
       error: 'Google Calendar integration coming soon',
-      message: 'I'\''ve taken your information. Our office manager will call you within the hour to confirm your appointment.'
+      message: "I've taken your information. Our office manager will call you within the hour to confirm your appointment."
     }, { status: 501 });
 
   } catch (error: any) {
     console.error('[book-appointment] Google Calendar error:', error);
     return NextResponse.json({
       error: error.message,
-      message: 'I'\''ve noted your appointment request. Our office will call you back shortly.'
+      message: "I've noted your appointment request. Our office will call you back shortly."
     }, { status: 500 });
   }
 }

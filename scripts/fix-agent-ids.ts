@@ -23,8 +23,9 @@ async function fixAgentIds() {
 
   console.log('Found agent:', agent.business_name, agent.id);
 
-  // Use the working Test Agent with correct webhook URL
-  const workingAgentId = 'agent_a5f4f85fae3d437567417811e6';
+  // Use the CORRECT Retell agent with correct webhook URL
+  const workingAgentId = 'agent_fc977a82b680b6dfae4bfa7a15';
+  const llmId = 'llm_5207418a1ed54bfea280a26bc2fd';
 
   console.log(`\nUsing Retell agent: ${workingAgentId}`);
 
@@ -37,11 +38,12 @@ async function fixAgentIds() {
     console.log('  Webhook:', retellAgent.webhook_url);
     console.log('  LLM ID:', retellAgent.llm_websocket_url ? 'Custom' : retellAgent.response_engine);
 
-    // Update database with this agent ID
+    // Update database with this agent ID AND LLM ID
     const { error: updateError } = await supabase
       .from('agents')
       .update({
         retell_agent_id: workingAgentId,
+        retell_llm_id: llmId,
         updated_at: new Date().toISOString()
       })
       .eq('id', agent.id);
