@@ -5,9 +5,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
+  console.log('[check-availability] ROUTE HIT - START');
   try {
     const { agentId } = await params;
-    const { date, timezone = 'America/New_York', execution_message } = await request.json();
+    console.log('[check-availability] agentId from params:', agentId);
+    const body = await request.json();
+    const { date, timezone = 'America/New_York', execution_message } = body;
+    console.log('[check-availability] Request body:', JSON.stringify(body));
 
     console.log(`[check-availability] Request for agent ${agentId}, date: ${date}, timezone: ${timezone}`);
 
