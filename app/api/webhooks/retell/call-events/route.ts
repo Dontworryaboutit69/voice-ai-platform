@@ -550,14 +550,10 @@ async function syncToIntegrationsAsync(
       startedAt: new Date(call.started_at),
       endedAt: new Date(call.ended_at),
       durationSeconds: call.duration_ms ? Math.floor(call.duration_ms / 1000) : 0,
-      appointmentBooked: outcome.type === 'appointment_booked' ? {
-        title: `Appointment with ${outcome.customerName}`,
-        date: outcome.appointmentDate!,
-        time: outcome.appointmentTime!,
-        timezone: 'America/New_York', // TODO: Get from agent config
-        durationMinutes: 60,
-        serviceType: outcome.service,
-      } : undefined,
+      // Don't pass appointmentBooked — the book_appointment tool already
+      // created the appointment during the call. Passing it here would
+      // cause processCallData to create a duplicate appointment in GHL.
+      appointmentBooked: undefined,
     };
 
     // Import integration factory
