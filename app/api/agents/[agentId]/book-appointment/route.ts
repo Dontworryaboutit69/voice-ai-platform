@@ -8,18 +8,50 @@ export async function POST(
   try {
     const { agentId } = await params;
     const body = await request.json();
-    // Accept both naming conventions (Retell tool sends customer_*, our API uses caller_*)
-    const providedContactId = body.contactId;
-    const date = body.date || body.appointment_date;
-    const time = body.time || body.appointment_time;
-    const timezone = body.timezone || 'America/New_York';
-    const title = body.title;
-    const notes = body.notes;
-    const caller_name = body.caller_name || body.customer_name;
-    const caller_phone = body.caller_phone || body.customer_phone;
-    const caller_email = body.caller_email || body.customer_email;
 
-    console.log(`[book-appointment] Booking for agent ${agentId}:`, { providedContactId, date, time, timezone, caller_name, caller_phone });
+    // Log the FULL raw body from Retell so we can debug
+    console.log(`[book-appointment] RAW BODY from Retell:`, JSON.stringify(body, null, 2));
+
+    // Retell may nest params inside `args` object
+    const args = body.args || body;
+
+    // Accept both naming conventions (Retell tool sends customer_*, our API uses caller_*)
+    const providedContactId = args.contactId;
+    const rawDate = args.date || args.appointment_date;
+    const rawTime = args.time || args.appointment_time;
+    const timezone = args.timezone || 'America/New_York';
+    const title = args.title;
+    const notes = args.notes;
+    const caller_name = args.caller_name || args.customer_name;
+    const caller_phone = args.caller_phone || args.customer_phone;
+    const caller_email = args.caller_email || args.customer_email;
+
+    // Normalize time format: handle "9:00 AM", "09:00 ET", "14:00", "2:00 PM", etc.
+    let time = rawTime;
+    if (time) {
+      // Remove timezone suffixes like "ET", "EST", "PT", etc.
+      time = time.replace(/\s*(ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|PT|PST|PDT)\s*$/i, '').trim();
+
+      // Convert 12h to 24h format
+      const ampmMatch = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (ampmMatch) {
+        let hour = parseInt(ampmMatch[1]);
+        const min = ampmMatch[2];
+        const period = ampmMatch[3].toUpperCase();
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        time = `${hour.toString().padStart(2, '0')}:${min}`;
+      }
+
+      // Ensure HH:MM format (pad single digit hours)
+      const simpleMatch = time.match(/^(\d{1,2}):(\d{2})$/);
+      if (simpleMatch) {
+        time = `${simpleMatch[1].padStart(2, '0')}:${simpleMatch[2]}`;
+      }
+    }
+    const date = rawDate;
+
+    console.log(`[book-appointment] Parsed params:`, { providedContactId, date, time, rawTime, timezone, caller_name, caller_phone, caller_email });
 
     if (!date || !time) {
       return NextResponse.json(
