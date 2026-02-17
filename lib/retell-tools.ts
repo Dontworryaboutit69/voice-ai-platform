@@ -58,7 +58,7 @@ export function getCheckAvailabilityTool(agentId: string): RetellCustomTool {
       speak_on_send: false,
       speak_during_execution: true,
       execution_message_description: 'Checking available time slots',
-      url: `${getAppUrl()}/api/agents/${agentId}/check-availability`
+      url: `${getAppUrl()}/api/agents/${agentId}/calendar-check`
     }
   };
 }
