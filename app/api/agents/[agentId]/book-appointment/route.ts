@@ -1,0 +1,139 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/client';
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
+) {
+  try {
+    const { agentId } = await params;
+    const body = await request.json();
+    const { contactId, date, time, timezone = 'America/New_York', title, notes } = body;
+
+    console.log(`[book-appointment] Booking for agent ${agentId}:`, { contactId, date, time, timezone });
+
+    if (!contactId || !date || !time) {
+      return NextResponse.json(
+        { success: false, error: 'contactId, date, and time are required' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServiceClient();
+
+    // Get active calendar integration (GoHighLevel or Google Calendar)
+    const { data: integration, error: integrationError } = await supabase
+      .from('integration_connections')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('is_active', true)
+      .or('integration_type.eq.gohighlevel,integration_type.eq.google_calendar')
+      .single();
+
+    if (integrationError || !integration) {
+      console.error('[book-appointment] No active calendar integration:', integrationError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No calendar integration configured'
+        },
+        { status: 200 }
+      );
+    }
+
+    console.log(`[book-appointment] Found ${integration.integration_type} integration`);
+
+    // Handle GoHighLevel booking
+    if (integration.integration_type === 'gohighlevel') {
+      const calendarId = integration.config?.calendar_id;
+      const accessToken = integration.api_key;
+
+      if (!calendarId || !accessToken) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Calendar not properly configured'
+          },
+          { status: 200 }
+        );
+      }
+
+      try {
+        // Import and use GoHighLevel integration
+        const { GoHighLevelIntegration } = await import('@/lib/integrations/gohighlevel');
+        const ghl = new GoHighLevelIntegration(integration);
+
+        const result = await ghl.bookAppointment({
+          contactId,
+          date,
+          time,
+          timezone,
+          title: title || 'Phone Consultation',
+          description: notes || 'Booked via phone call',
+          durationMinutes: 30 // Default 30 min appointment
+        });
+
+        if (!result.success) {
+          console.error('[book-appointment] GHL booking failed:', result.error);
+          return NextResponse.json(
+            {
+              success: false,
+              error: result.error || 'Failed to book appointment'
+            },
+            { status: 200 }
+          );
+        }
+
+        console.log(`[book-appointment] ✅ Appointment booked: ${result.data?.appointmentId}`);
+
+        return NextResponse.json({
+          success: true,
+          appointmentId: result.data?.appointmentId,
+          date,
+          time,
+          timezone
+        });
+
+      } catch (error: any) {
+        console.error('[book-appointment] Error booking with GHL:', error);
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Calendar service unavailable'
+          },
+          { status: 200 }
+        );
+      }
+    }
+
+    // Handle Google Calendar
+    if (integration.integration_type === 'google_calendar') {
+      // TODO: Implement Google Calendar booking
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Google Calendar booking not yet implemented'
+        },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Unknown calendar type'
+      },
+      { status: 200 }
+    );
+
+  } catch (error: any) {
+    console.error('[book-appointment] Unexpected error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Internal server error'
+      },
+      { status: 500 }
+    );
+  }
+}

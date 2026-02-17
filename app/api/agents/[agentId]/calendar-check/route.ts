@@ -41,9 +41,10 @@ export async function POST(
     if (integration.integration_type === 'gohighlevel') {
       const calendarId = integration.config?.calendar_id;
       const locationId = integration.config?.location_id;
-      const accessToken = integration.access_token;
+      const accessToken = integration.api_key; // GHL uses api_key field
 
       if (!calendarId || !locationId || !accessToken) {
+        console.error('[calendar-check] Missing config:', { calendarId, locationId, hasToken: !!accessToken });
         return NextResponse.json(
           {
             success: false,
