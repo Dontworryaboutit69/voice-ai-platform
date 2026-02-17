@@ -40,16 +40,34 @@ export async function POST(
     // Handle GoHighLevel calendar
     if (integration.integration_type === 'gohighlevel') {
       try {
-        console.log('[calendar-check] Generating available slots for date:', date);
+        console.log('[calendar-check] Fetching real availability from GHL for date:', date);
 
-        // TODO: Integrate with actual GoHighLevel calendar API
-        // For now, return standard business hours (9 AM - 5 PM, hourly slots)
-        const slots = [
-          '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-          '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM'
-        ];
+        const { GoHighLevelIntegration } = await import('@/lib/integrations/gohighlevel');
+        const ghl = new GoHighLevelIntegration(integration);
 
-        console.log(`[calendar-check] Returning ${slots.length} available slots`);
+        const result = await ghl.checkAvailability(date, timezone);
+
+        if (!result.success) {
+          console.error('[calendar-check] GHL availability check failed:', result.error);
+          return NextResponse.json(
+            {
+              success: false,
+              error: result.error || 'Failed to check availability',
+              slots: []
+            },
+            { status: 200 }
+          );
+        }
+
+        // Convert 24h format slots (HH:MM) to 12h format for the voice agent
+        const slots = (result.data?.availableSlots || []).map(slot => {
+          const [hour, minute] = slot.split(':').map(Number);
+          const period = hour >= 12 ? 'PM' : 'AM';
+          const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+          return `${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`;
+        });
+
+        console.log(`[calendar-check] Returning ${slots.length} available slots from GHL`);
 
         return NextResponse.json({
           success: true,
