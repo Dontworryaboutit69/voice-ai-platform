@@ -160,15 +160,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: 'Failed to create contact',
-          debug_contact_error: contactResult.error || 'No error message',
-          debug_contact_result: JSON.stringify(contactResult),
-          debug_integration: {
-            resolvedAgentId,
-            integrationAgentId: integration.agent_id,
-            hasApiKey: !!integration.api_key,
-            apiKeyPrefix: integration.api_key?.substring(0, 15),
-            locationId: integration.config?.location_id,
-          },
           message: "I've taken down your information. Our office manager will call you within the hour to confirm your appointment."
         });
       }
@@ -193,7 +184,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: bookResult.error || 'Failed to book appointment',
-          debug_booking_error: JSON.stringify(bookResult),
           message: "I've saved your contact information in our system. Our office manager will call you within the hour to finalize your appointment."
         });
       }
