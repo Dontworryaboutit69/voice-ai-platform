@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[book-appointment] Found ${integration.integration_type} integration`);
+    console.log(`[book-appointment /api/tools] Found ${integration.integration_type} integration, resolvedAgentId=${resolvedAgentId}, integration.id=${integration.id}`);
 
     if (integration.integration_type === 'gohighlevel') {
       const ghl = new GoHighLevelIntegration(integration);
@@ -142,10 +142,12 @@ export async function POST(request: NextRequest) {
       });
 
       if (!contactResult.success || !contactResult.data) {
-        console.error('[book-appointment] Failed to create/find contact:', contactResult.error);
+        console.error('[book-appointment] Failed to create/find contact:', JSON.stringify(contactResult));
         return NextResponse.json({
           success: false,
           error: 'Failed to create contact',
+          debug_contact_error: contactResult.error || 'No error message',
+          debug_contact_result: JSON.stringify(contactResult),
           message: "I've taken down your information. Our office manager will call you within the hour to confirm your appointment."
         });
       }
@@ -166,10 +168,11 @@ export async function POST(request: NextRequest) {
       });
 
       if (!bookResult.success) {
-        console.error('[book-appointment] GHL booking failed:', bookResult.error);
+        console.error('[book-appointment] GHL booking failed:', JSON.stringify(bookResult));
         return NextResponse.json({
           success: false,
           error: bookResult.error || 'Failed to book appointment',
+          debug_booking_error: JSON.stringify(bookResult),
           message: "I've saved your contact information in our system. Our office manager will call you within the hour to finalize your appointment."
         });
       }
