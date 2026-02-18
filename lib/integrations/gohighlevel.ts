@@ -269,7 +269,10 @@ export class GoHighLevelIntegration extends BaseIntegration {
       let availableSlots: string[] = [];
 
       // Attempt 1: Try the free-slots endpoint via leadconnectorhq (v2)
-      const freeSlotsUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${date}&endDate=${date}${timezone ? `&timezone=${encodeURIComponent(timezone)}` : ''}`;
+      // GHL requires epoch milliseconds for startDate/endDate
+      const startEpoch = new Date(`${date}T00:00:00`).getTime();
+      const endEpoch = new Date(`${date}T23:59:59`).getTime();
+      const freeSlotsUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${startEpoch}&endDate=${endEpoch}${timezone ? `&timezone=${encodeURIComponent(timezone)}` : ''}`;
       console.log('[GHL] Trying v2 free-slots:', freeSlotsUrl);
 
       const freeSlotsResponse = await fetch(freeSlotsUrl, {
@@ -388,20 +391,37 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Build ISO start time
-      const startDateTime = new Date(`${data.date}T${data.time}:00`).toISOString();
-      const endDateTime = new Date(
-        new Date(`${data.date}T${data.time}:00`).getTime() + (data.durationMinutes || 30) * 60000
-      ).toISOString();
+      // Build timezone-offset ISO string (GHL requires this format, not UTC)
+      // e.g., "2026-02-18T10:00:00-05:00" for America/New_York
+      const tz = data.timezone || 'America/New_York';
+      const localIso = `${data.date}T${data.time}:00`;
 
-      // GHL v2 appointment payload — includes both startTime/endTime and selectedSlot/selectedTimezone
+      // Get the timezone offset by creating a date in the target timezone
+      const tempDate = new Date(localIso);
+      const offsetMinutes = -tempDate.getTimezoneOffset(); // Note: getTimezoneOffset returns opposite sign
+      const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+      const offsetMins = Math.abs(offsetMinutes) % 60;
+      const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+      const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+
+      const startDateTime = `${localIso}${offsetStr}`;
+      const endMs = tempDate.getTime() + (data.durationMinutes || 30) * 60000;
+      const endDate = new Date(endMs);
+      const endH = String(endDate.getHours()).padStart(2, '0');
+      const endM = String(endDate.getMinutes()).padStart(2, '0');
+      const endS = String(endDate.getSeconds()).padStart(2, '0');
+      const endDateTime = `${data.date}T${endH}:${endM}:${endS}${offsetStr}`;
+
+      console.log('[GHL] Booking times:', { startDateTime, endDateTime, tz });
+
+      // GHL v2 appointment payload — selectedSlot must match the format from free-slots
       const payload: any = {
         calendarId,
         locationId: this.locationId,
         contactId: data.contactId,
         startTime: startDateTime,
         endTime: endDateTime,
-        selectedTimezone: data.timezone || 'America/New_York',
+        selectedTimezone: tz,
         selectedSlot: startDateTime,
         title: data.title || 'Phone Consultation',
         appointmentStatus: 'confirmed',
