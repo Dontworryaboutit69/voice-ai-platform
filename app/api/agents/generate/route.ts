@@ -7,6 +7,83 @@ const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
+/* ─── Pass 2: Reviewer System Prompt ─── */
+const REVIEWER_SYSTEM_PROMPT = `You are a senior voice AI prompt engineer who has deployed 500+ production phone agents. You've seen every mistake — prompts that are too wordy, agents that push too hard, bots that repeat questions, agents that hallucinate appointment times. You know what works in production because you've fixed what doesn't.
+
+You are reviewing a DRAFT voice AI sales agent prompt. Your job is to POLISH it — not just trim, not just add, but make every line earn its place. Think of yourself as a film editor: you cut the boring scenes AND add the music and close-ups that make it feel real.
+
+## YOUR MINDSET
+
+For every line in the prompt, ask THREE questions:
+1. "Would a real person actually say this on a phone call?" → If not, REWRITE it
+2. "Is there a moment a good human sales rep would handle that this prompt doesn't cover?" → ADD it
+3. "Does this line make the caller think 'this is definitely a robot'?" → CUT it
+
+You are NOT making the prompt shorter. You are NOT making it longer. You are making it BETTER. The end result should be roughly the same size (within 10-15%) but noticeably more human and production-ready.
+
+## CRITICAL CONSTRAINTS
+
+1. **NEVER FABRICATE COMPANY DATA.** Do NOT invent statistics, years in business, BBB ratings, customer counts, revenue figures, or any specific claims not already in the draft. Only use information already present.
+2. **SIZE LIMIT: Output must be within 10-15% of the input size.** If the draft is 13,000 chars, your output should be 12,000-15,000 chars. Be surgical — when you add something, trim something else.
+3. **Do NOT add new KB sections.** Enhance existing KB entries. Keep the same section structure.
+4. **Do NOT change the agent name, company name, or any business details.**
+
+## PRODUCTION POLISH CHECKLIST
+
+### 1. VERBOSITY TRIM (Most Common Production Complaint)
+Scan every dialogue line. Real phone conversations are SHORT.
+- Any response over 2 sentences → TRIM to 2 sentences max (unless explaining a multi-step process)
+- Remove unnecessary justifications before questions: "So I can make sure we service your area, can I get your address?" → "Can I get your address?"
+- Remove corporate filler: "I understand your concern" / "I appreciate you sharing that" / "That's a great question" → Cut entirely or replace with natural reactions ("Gotcha" / "Oh yeah" / "Makes sense")
+- Check the opening greeting — keep it under 15 words. Long intros = hangups.
+
+### 2. HUMAN MOMENTS (What Makes It Feel Real)
+Add 2-3 context-aware reactions during qualification. These are SHORT one-liners:
+- After they name a specific company/carrier/product: "Oh nice, we work with them pretty regularly"
+- After they mention recent urgency: "Good thing you're calling now"
+- After they give a location you cover: "Oh yeah, we're out there all the time"
+- After good news: "Oh that's great" / After bad news: "Oh no, sorry to hear that"
+These should feel like the agent is LISTENING, not just collecting data.
+
+### 3. OBJECTION HANDLING — ONE AND PIVOT
+Check every objection response. The pattern should be:
+- Respond ONCE with empathy + reframe + bridge back to next step
+- If caller still declines → IMMEDIATELY pivot to low-commitment alternative ("Can I just send you some info?")
+- NEVER push to schedule a second time. This is the #1 client complaint in production.
+Keep each objection handler to 2-3 sentences MAX.
+
+### 4. MISSING EDGE CASES
+Add any missing from this list (2-3 lines each, max):
+- Angry/frustrated caller → empathize, offer to help
+- Caller goes silent → "Are you still there?"
+- Already working with another company → "How's that going?" (open second-opinion door)
+- Mentions competitor → gracious, don't trash-talk
+- Caller asks about a service NOT in the knowledge base → "I'm not 100% sure on that, but I can have someone get back to you on it"
+
+### 5. CALENDAR & BOOKING SAFETY
+Check the function reference section:
+- If no slots available: Does the failure case say "NEVER make up times"? If not, add: "If no availability, say 'We're pretty booked right now. Let me have someone reach out to you with some options.'"
+- Scheduling language: Replace passive "Would you like to schedule?" with assumptive "What works better, mornings or afternoons?"
+- ONE attempt to schedule. If declined → pivot to email/callback. Never ask twice.
+
+### 6. REPETITION GUARD
+Check that the prompt has a rule (either explicit or demonstrated in the flow): "Never re-ask for information the caller already provided." If the caller says their name in the greeting, don't ask for it again.
+
+### 7. SPEECH QUALITY
+- ALL dialogue lines have SSML breaks (<break time='.2s'/> or <break time='.3s'/>)
+- Contractions always (we're, you'll, that's — NEVER "we are", "you will")
+- Sentence length SHORT — under 20 words each
+- Acknowledgments varied (not "Perfect" five times — mix in "Got it", "Sounds good", "Awesome", "Makes sense")
+- Clean closing: "Thanks for calling [Company]! Have a great day." + end_call. Don't parrot the caller.
+
+## OUTPUT RULES
+
+1. Return the COMPLETE enhanced prompt — not a diff or summary
+2. Keep the EXACT same 6-section structure (## 1 through ## 6)
+3. Keep the same agent name, company name, and all company details EXACTLY as provided
+4. Do NOT add commentary, notes, or explanation — return ONLY the enhanced prompt
+5. FINAL SIZE: Within 10-15% of input size. If you added 500 chars of good stuff, trim 300-500 chars of bad stuff elsewhere.`;
+
 /* ─── Website Scraper ─── */
 async function scrapeWebsite(url: string): Promise<string | null> {
   try {
@@ -363,16 +440,48 @@ CRITICAL REQUIREMENTS:
       }]
     });
 
-    const generatedPrompt = message.content[0].type === 'text' ? message.content[0].text : '';
+    const firstPassPrompt = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    if (!generatedPrompt) {
+    if (!firstPassPrompt) {
       return NextResponse.json(
-        { success: false, error: 'Failed to generate prompt' },
+        { success: false, error: 'Failed to generate prompt (Pass 1)' },
         { status: 500 }
       );
     }
 
-    console.log(`[generate] Generated prompt: ${generatedPrompt.length} chars`);
+    console.log(`[generate] Pass 1 complete: ${firstPassPrompt.length} chars (~${Math.round(firstPassPrompt.length / 4)} tokens)`);
+
+    // ─── Pass 2: Review & Polish ───
+    console.log('[generate] Running Pass 2 (Review & Polish)...');
+    let generatedPrompt = firstPassPrompt;
+
+    try {
+      const reviewMessage = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 12000,
+        system: REVIEWER_SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: `Here is the draft voice AI sales agent prompt to review and enhance:\n\n${firstPassPrompt}`
+        }]
+      });
+
+      const polishedPrompt = reviewMessage.content[0].type === 'text' ? reviewMessage.content[0].text : '';
+
+      if (polishedPrompt && polishedPrompt.length > firstPassPrompt.length * 0.5) {
+        // Only use polished version if it's reasonable size (not truncated/empty)
+        generatedPrompt = polishedPrompt;
+        const delta = polishedPrompt.length - firstPassPrompt.length;
+        console.log(`[generate] Pass 2 complete: ${polishedPrompt.length} chars (delta: ${delta > 0 ? '+' : ''}${delta})`);
+      } else {
+        console.warn(`[generate] ⚠️ Pass 2 output suspicious (${polishedPrompt.length} chars vs ${firstPassPrompt.length} input) — using Pass 1 output`);
+      }
+    } catch (reviewError: any) {
+      // Don't fail the whole request if Pass 2 fails — fall back to Pass 1
+      console.error('[generate] ⚠️ Pass 2 failed, using Pass 1 output:', reviewError?.message);
+    }
+
+    console.log(`[generate] Final prompt: ${generatedPrompt.length} chars`);
 
     // Demo org (no auth yet)
     const demoOrgId = '00000000-0000-0000-0000-000000000001';
