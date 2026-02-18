@@ -128,7 +128,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[book-appointment /api/tools] Found ${integration.integration_type} integration, resolvedAgentId=${resolvedAgentId}, integration.id=${integration.id}`);
+    console.log(`[book-appointment /api/tools] Found integration:`, {
+      type: integration.integration_type,
+      resolvedAgentId,
+      integrationId: integration.id,
+      agentId: integration.agent_id,
+      hasApiKey: !!integration.api_key,
+      apiKeyPrefix: integration.api_key?.substring(0, 10) + '...',
+      locationId: integration.config?.location_id,
+      calendarId: integration.config?.calendar_id,
+    });
 
     if (integration.integration_type === 'gohighlevel') {
       const ghl = new GoHighLevelIntegration(integration);
@@ -148,6 +157,13 @@ export async function POST(request: NextRequest) {
           error: 'Failed to create contact',
           debug_contact_error: contactResult.error || 'No error message',
           debug_contact_result: JSON.stringify(contactResult),
+          debug_integration: {
+            resolvedAgentId,
+            integrationAgentId: integration.agent_id,
+            hasApiKey: !!integration.api_key,
+            apiKeyPrefix: integration.api_key?.substring(0, 15),
+            locationId: integration.config?.location_id,
+          },
           message: "I've taken down your information. Our office manager will call you within the hour to confirm your appointment."
         });
       }
