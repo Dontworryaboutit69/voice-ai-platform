@@ -391,28 +391,38 @@ export class GoHighLevelIntegration extends BaseIntegration {
         };
       }
 
-      // Build timezone-offset ISO string (GHL requires this format, not UTC)
+      // Build timezone-offset ISO string matching GHL's free-slots format
       // e.g., "2026-02-18T10:00:00-05:00" for America/New_York
       const tz = data.timezone || 'America/New_York';
       const localIso = `${data.date}T${data.time}:00`;
 
-      // Get the timezone offset by creating a date in the target timezone
-      const tempDate = new Date(localIso);
-      const offsetMinutes = -tempDate.getTimezoneOffset(); // Note: getTimezoneOffset returns opposite sign
-      const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
-      const offsetMins = Math.abs(offsetMinutes) % 60;
-      const offsetSign = offsetMinutes >= 0 ? '+' : '-';
-      const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+      // Get the real UTC offset for the target timezone using Intl API
+      // This works correctly regardless of server timezone (Vercel runs in UTC)
+      const getTimezoneOffset = (dateStr: string, timeZone: string): string => {
+        const date = new Date(dateStr + 'Z'); // Parse as UTC
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          timeZoneName: 'longOffset',
+        });
+        const parts = formatter.formatToParts(date);
+        const tzPart = parts.find(p => p.type === 'timeZoneName');
+        // Format is like "GMT-05:00" or "GMT+05:30"
+        const match = tzPart?.value?.match(/GMT([+-]\d{2}:\d{2})/);
+        return match ? match[1] : '-05:00'; // Default to EST if parsing fails
+      };
 
+      const offsetStr = getTimezoneOffset(localIso, tz);
       const startDateTime = `${localIso}${offsetStr}`;
-      const endMs = tempDate.getTime() + (data.durationMinutes || 30) * 60000;
-      const endDate = new Date(endMs);
-      const endH = String(endDate.getHours()).padStart(2, '0');
-      const endM = String(endDate.getMinutes()).padStart(2, '0');
-      const endS = String(endDate.getSeconds()).padStart(2, '0');
-      const endDateTime = `${data.date}T${endH}:${endM}:${endS}${offsetStr}`;
 
-      console.log('[GHL] Booking times:', { startDateTime, endDateTime, tz });
+      // Compute end time
+      const durationMs = (data.durationMinutes || 30) * 60000;
+      const [startH, startM] = data.time.split(':').map(Number);
+      const totalMinutes = startH * 60 + startM + (data.durationMinutes || 30);
+      const endH = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+      const endM = String(totalMinutes % 60).padStart(2, '0');
+      const endDateTime = `${data.date}T${endH}:${endM}:00${offsetStr}`;
+
+      console.log('[GHL] Booking times:', { startDateTime, endDateTime, tz, offsetStr });
 
       // GHL v2 appointment payload — selectedSlot must match the format from free-slots
       const payload: any = {
