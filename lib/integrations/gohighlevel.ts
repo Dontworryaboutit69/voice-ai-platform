@@ -93,6 +93,24 @@ export class GoHighLevelIntegration extends BaseIntegration {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[GHL] Create contact failed:', response.status, errorText.substring(0, 300));
+
+        // Handle duplicate contact error — GHL returns the existing contactId in the error
+        if (response.status === 400 && errorText.includes('duplicated contacts')) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            const existingContactId = errorJson.meta?.contactId;
+            if (existingContactId) {
+              console.log(`[GHL] Duplicate detected — using existing contact: ${existingContactId}`);
+              return {
+                success: true,
+                data: { contactId: existingContactId }
+              };
+            }
+          } catch (e) {
+            // Couldn't parse error, fall through to throw
+          }
+        }
+
         throw new Error(`GHL API error ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
