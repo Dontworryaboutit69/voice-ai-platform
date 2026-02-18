@@ -93,19 +93,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If still not resolved, fall back: find ANY active GHL integration
-      // (for single-agent setups this is safe)
+      // If still not resolved, fall back: find active GHL integration with a valid API key
+      // Filter for 'connected' status and API keys that start with 'pit-' (GHL private integration tokens)
       if (!resolvedAgentId || resolvedAgentId === agent_id) {
         const { data: fallbackInt } = await supabase
           .from('integration_connections')
-          .select('agent_id')
+          .select('agent_id, api_key, connection_status')
           .eq('is_active', true)
           .eq('integration_type', 'gohighlevel')
-          .limit(1);
+          .eq('connection_status', 'connected')
+          .order('updated_at', { ascending: false })
+          .limit(5);
 
         if (fallbackInt && fallbackInt.length > 0) {
-          resolvedAgentId = fallbackInt[0].agent_id;
-          console.log(`[book-appointment /api/tools] Fallback to first active GHL integration: "${resolvedAgentId}"`);
+          // Prefer integration with pit- API key (GHL private integration token)
+          const pitKeyInt = fallbackInt.find(i => i.api_key?.startsWith('pit-'));
+          const chosen = pitKeyInt || fallbackInt[0];
+          resolvedAgentId = chosen.agent_id;
+          console.log(`[book-appointment /api/tools] Fallback to GHL integration: "${resolvedAgentId}" (pit-key: ${!!pitKeyInt})`);
         }
       }
     }
