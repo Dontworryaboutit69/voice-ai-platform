@@ -169,11 +169,13 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       if (data.success) {
         const parts = [`Evaluated ${data.evaluated || 0} calls`];
         if (data.skipped) parts.push(`skipped ${data.skipped} non-interactive`);
+        if (data.patternsAnalyzed) parts.push('pattern analysis complete');
         if (data.patternError) parts.push(`Note: ${data.patternError}`);
+        if (data.timedOut) parts.push('Click "Run Analysis" again to continue with remaining calls');
 
-        setStatusMessage(`✅ Analysis complete! ${parts.join(', ')}.`);
+        setStatusMessage(`✅ ${parts.join('. ')}.`);
         await loadData();
-        setTimeout(() => setStatusMessage(null), 5000);
+        setTimeout(() => setStatusMessage(null), data.timedOut ? 10000 : 5000);
       } else {
         setStatusMessage(`❌ ${data.error || 'Analysis failed. Check server logs.'}`);
         console.error('Analysis failed:', data.error);

@@ -29,7 +29,9 @@ export async function POST(
 
     const supabase = createServiceClient();
     const startTime = Date.now();
-    const MAX_RUNTIME_MS = 50000; // Leave 10s buffer before Vercel timeout
+    // Each Claude call takes 5-15s. Reserve 20s for the last eval + pattern analysis.
+    const MAX_EVAL_MS = 35000;
+    const MAX_TOTAL_MS = 50000;
 
     // Step 1: Evaluate any un-evaluated calls
     const startDate = new Date();
@@ -75,9 +77,10 @@ export async function POST(
     let apiBillingError = false;
 
     for (const call of unevaluatedCalls) {
-      // Check if we're running low on time
-      if (Date.now() - startTime > MAX_RUNTIME_MS) {
-        console.log(`[ai-manager/analyze] Approaching timeout, stopping evaluations. ${unevaluatedCalls.length - evaluatedCount - evalErrors - skippedCount} calls remaining.`);
+      // Check if we're running low on time for evaluations
+      if (Date.now() - startTime > MAX_EVAL_MS) {
+        const remaining = unevaluatedCalls.length - evaluatedCount - evalErrors - skippedCount;
+        console.log(`[ai-manager/analyze] Approaching eval time limit (${Math.round((Date.now() - startTime) / 1000)}s), stopping. ${remaining} calls remaining.`);
         timedOut = true;
         break;
       }
@@ -120,7 +123,7 @@ export async function POST(
     // Step 2: Run pattern analysis across all evaluations (only if we have time)
     let patternsRan = false;
     let patternError: string | null = null;
-    if (Date.now() - startTime < MAX_RUNTIME_MS) {
+    if (Date.now() - startTime < MAX_TOTAL_MS) {
       console.log(`[ai-manager/analyze] Running pattern analysis for agent ${agentId} (last ${daysSince} days)`);
       try {
         await analyzePatterns(agentId, daysSince);
