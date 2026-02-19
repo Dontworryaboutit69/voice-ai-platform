@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { analyzePatterns, evaluateCall } from '@/lib/services/ai-manager.service';
 import { createServiceClient } from '@/lib/supabase/client';
 
+// Allow up to 60 seconds for this endpoint (Vercel Pro allows up to 300s)
+export const maxDuration = 60;
+
 /**
  * POST /api/agents/[agentId]/ai-manager/analyze
  * Manually trigger call evaluation + pattern analysis for an agent.
@@ -25,6 +28,8 @@ export async function POST(
     }
 
     const supabase = createServiceClient();
+    const startTime = Date.now();
+    const MAX_RUNTIME_MS = 50000; // Leave 10s buffer before Vercel timeout
 
     // Step 1: Evaluate any un-evaluated calls
     const startDate = new Date();
@@ -60,16 +65,30 @@ export async function POST(
     // Filter to un-evaluated calls
     const unevaluatedCalls = (calls || []).filter(c => !evaluatedCallIds.has(c.id));
 
-    console.log(`[ai-manager/analyze] Found ${calls?.length || 0} calls, ${unevaluatedCalls.length} need evaluation`);
+    console.log(`[ai-manager/analyze] Found ${calls?.length || 0} calls, ${evaluatedCallIds.size} already evaluated, ${unevaluatedCalls.length} need evaluation`);
 
-    // Evaluate each un-evaluated call
+    // Evaluate each un-evaluated call (with timeout guard)
     let evaluatedCount = 0;
+    let skippedCount = 0;
     let evalErrors = 0;
+    let timedOut = false;
+
     for (const call of unevaluatedCalls) {
+      // Check if we're running low on time
+      if (Date.now() - startTime > MAX_RUNTIME_MS) {
+        console.log(`[ai-manager/analyze] Approaching timeout, stopping evaluations. ${unevaluatedCalls.length - evaluatedCount - evalErrors - skippedCount} calls remaining.`);
+        timedOut = true;
+        break;
+      }
+
       try {
         console.log(`[ai-manager/analyze] Evaluating call ${call.id}...`);
-        await evaluateCall(call.id);
-        evaluatedCount++;
+        const result = await evaluateCall(call.id);
+        if (result === null) {
+          skippedCount++; // Non-interactive call
+        } else {
+          evaluatedCount++;
+        }
       } catch (error) {
         evalErrors++;
         console.error(`[ai-manager/analyze] Failed to evaluate call ${call.id}:`, error);
@@ -77,18 +96,28 @@ export async function POST(
       }
     }
 
-    console.log(`[ai-manager/analyze] Evaluated ${evaluatedCount} calls (${evalErrors} errors)`);
+    console.log(`[ai-manager/analyze] Evaluated ${evaluatedCount} calls, skipped ${skippedCount}, errors ${evalErrors}`);
 
-    // Step 2: Run pattern analysis across all evaluations
-    console.log(`[ai-manager/analyze] Running pattern analysis for agent ${agentId} (last ${daysSince} days)`);
-    await analyzePatterns(agentId, daysSince);
+    // Step 2: Run pattern analysis across all evaluations (only if we have time)
+    let patternsRan = false;
+    if (Date.now() - startTime < MAX_RUNTIME_MS) {
+      console.log(`[ai-manager/analyze] Running pattern analysis for agent ${agentId} (last ${daysSince} days)`);
+      await analyzePatterns(agentId, daysSince);
+      patternsRan = true;
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Evaluated ${evaluatedCount} calls, then ran pattern analysis for last ${daysSince} days`,
+      message: timedOut
+        ? `Evaluated ${evaluatedCount} calls before timeout. Run analysis again to continue.`
+        : `Evaluated ${evaluatedCount} calls, then ran pattern analysis for last ${daysSince} days`,
       evaluated: evaluatedCount,
+      skipped: skippedCount,
       errors: evalErrors,
       totalCalls: calls?.length || 0,
+      previouslyEvaluated: evaluatedCallIds.size,
+      patternsAnalyzed: patternsRan,
+      timedOut,
     });
   } catch (error) {
     console.error('[ai-manager/analyze POST] Error:', error);

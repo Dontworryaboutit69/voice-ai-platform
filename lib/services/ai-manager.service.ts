@@ -67,13 +67,6 @@ export async function isCallInteractive(call: Call): Promise<boolean> {
     return false;
   }
 
-  // 4. Call ended immediately (hang-up pattern)
-  const firstUserMessage = userTurns[0]?.content || '';
-  if (firstUserMessage.length < 10) {
-    console.log(`[AI Manager] Call ${call.id} has very short first user message`);
-    return false;
-  }
-
   return true;
 }
 
@@ -349,11 +342,12 @@ export async function analyzePatterns(
   console.log(`[AI Manager] Detected ${patterns.length} patterns`);
 
   // 3. Generate improvement suggestions for significant patterns
-  // CRITICAL: Only suggest when pattern appears in 3+ calls
+  // Generate suggestions when pattern appears in 1+ calls (was 3+, but agents
+  // with fewer test calls still need actionable feedback)
   for (const pattern of patterns) {
     const occurrenceCount = pattern.example_call_ids.length;
 
-    if (occurrenceCount >= 3 && pattern.severity !== 'low') {
+    if (occurrenceCount >= 1 && pattern.severity !== 'low') {
       console.log(`[AI Manager] Pattern "${pattern.pattern}" occurred ${occurrenceCount} times - generating suggestion`);
 
       // Check if ANY suggestion (pending or accepted) already exists for this pattern type
