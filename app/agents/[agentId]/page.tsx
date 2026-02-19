@@ -71,6 +71,12 @@ export default function AgentDashboard() {
   const [settingsStatus, setSettingsStatus] = useState('draft');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // Transfer settings state
+  const [transferEnabled, setTransferEnabled] = useState(false);
+  const [transferNumber, setTransferNumber] = useState('');
+  const [transferPersonName, setTransferPersonName] = useState('');
+  const [transferTriggers, setTransferTriggers] = useState<string[]>([]);
+
   // Integrations state
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
@@ -184,6 +190,12 @@ export default function AgentDashboard() {
         setSettingsName(data.agent.business_name || '');
         setSettingsVoice(data.agent.voice_id || '11labs-Sarah');
         setSettingsStatus(data.agent.status || 'draft');
+
+        // Initialize transfer settings
+        setTransferEnabled(data.agent.transfer_enabled || false);
+        setTransferNumber(data.agent.transfer_number || '');
+        setTransferPersonName(data.agent.transfer_person_name || '');
+        setTransferTriggers(data.agent.transfer_triggers || []);
       } else {
         console.error('[Agent Page] API returned error:', data.error);
       }
@@ -903,7 +915,11 @@ export default function AgentDashboard() {
         body: JSON.stringify({
           business_name: settingsName,
           voice_id: settingsVoice,
-          status: settingsStatus
+          status: settingsStatus,
+          transfer_enabled: transferEnabled,
+          transfer_number: transferNumber,
+          transfer_person_name: transferPersonName,
+          transfer_triggers: transferTriggers,
         })
       });
 
@@ -2802,17 +2818,143 @@ export default function AgentDashboard() {
                       <option value="paused" className="text-gray-900">⏸️ Paused</option>
                     </select>
                   </div>
+                </div>
+              </div>
 
-                  <div className="pt-4">
+              {/* Call Transfer Settings */}
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 mt-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📞</span>
+                  Call Transfer
+                </h3>
+                <p className="text-sm text-gray-500 mb-6">
+                  Configure when and where the AI should transfer calls to a live person. Changes are synced to Retell automatically.
+                </p>
+
+                <div className="space-y-5">
+                  {/* Enable toggle */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                      <div className="text-sm font-bold text-gray-700">Enable live transfers</div>
+                      <div className="text-xs text-gray-500 mt-0.5">AI will transfer calls when triggered</div>
+                    </div>
                     <button
-                      onClick={saveSettings}
-                      disabled={isSavingSettings}
-                      className="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={() => setTransferEnabled(!transferEnabled)}
+                      className={`relative w-12 h-7 rounded-full transition-colors ${
+                        transferEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
                     >
-                      {isSavingSettings ? '⏳ Saving...' : '💾 Save Settings'}
+                      <div
+                        className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                          transferEnabled ? 'left-[26px]' : 'left-1'
+                        }`}
+                      />
                     </button>
                   </div>
+
+                  {transferEnabled && (
+                    <>
+                      {/* Transfer number + person name */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">
+                            Transfer to (name)
+                          </label>
+                          <input
+                            type="text"
+                            value={transferPersonName}
+                            onChange={(e) => setTransferPersonName(e.target.value)}
+                            placeholder="e.g. Miles, Renee, Front Desk"
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">
+                            Transfer phone number
+                          </label>
+                          <input
+                            type="tel"
+                            value={transferNumber}
+                            onChange={(e) => setTransferNumber(e.target.value)}
+                            placeholder="(555) 123-4567"
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-gray-900 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Transfer triggers */}
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-3">
+                          When should the AI transfer?
+                        </label>
+                        <div className="space-y-2">
+                          {[
+                            { id: 'customer_requests', label: 'Customer asks for a real person' },
+                            { id: 'existing_customer', label: 'Existing customer calling back' },
+                            { id: 'cant_answer', label: "Question the AI can't answer" },
+                            { id: 'emergency', label: 'Urgent or emergency situation' },
+                          ].map((trigger) => {
+                            const isSelected = transferTriggers.includes(trigger.id);
+                            return (
+                              <button
+                                key={trigger.id}
+                                type="button"
+                                onClick={() => {
+                                  setTransferTriggers(prev =>
+                                    isSelected
+                                      ? prev.filter(t => t !== trigger.id)
+                                      : [...prev, trigger.id]
+                                  );
+                                }}
+                                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                                  isSelected
+                                    ? 'border-blue-400 bg-blue-50'
+                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 bg-white'
+                                }`}>
+                                  {isSelected && (
+                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className={`text-sm font-medium ${isSelected ? 'text-gray-900' : 'text-gray-600'}`}>
+                                  {trigger.label}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Info box */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                        <span className="text-lg flex-shrink-0">💡</span>
+                        <div>
+                          <p className="text-sm font-medium text-amber-800">If the transfer fails</p>
+                          <p className="text-xs text-amber-700 mt-1">
+                            The AI will automatically take the caller&apos;s name and number for a callback instead of dropping the call.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="mt-6">
+                <button
+                  onClick={saveSettings}
+                  disabled={isSavingSettings}
+                  className="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingSettings ? '⏳ Saving...' : '💾 Save Settings'}
+                </button>
               </div>
             </div>
           )}

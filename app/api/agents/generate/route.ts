@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import Retell from 'retell-sdk';
 import { createServiceClient } from '@/lib/supabase/client';
+import { getTransferCallToolConfig } from '@/lib/retell-tools';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
@@ -595,7 +596,12 @@ CRITICAL REQUIREMENTS:
         business_description: description,
         website,
         service_area: location,
-        status: 'draft'
+        status: 'draft',
+        // Persist transfer settings so they survive and can be edited later
+        transfer_enabled: transferEnabled || false,
+        transfer_number: transferNumber || null,
+        transfer_person_name: transferPersonName || null,
+        transfer_triggers: transferTriggers || [],
       })
       .select()
       .single();
@@ -706,12 +712,7 @@ CRITICAL REQUIREMENTS:
 
         // Add transfer tool if transfers are enabled
         if (transferEnabled && transferNumber) {
-          retellTools.push({
-            type: 'transfer_call',
-            name: 'transfer_call',
-            description: `Transfer the call to ${transferPersonName || 'a team member'} when the caller requests a live person or meets transfer criteria.`,
-            number: transferNumber,
-          });
+          retellTools.push(getTransferCallToolConfig(transferNumber, transferPersonName));
         }
 
         // Step 1: Create Retell LLM

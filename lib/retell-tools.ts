@@ -122,6 +122,22 @@ export function getBookAppointmentTool(agentId: string): RetellCustomTool {
 }
 
 /**
+ * Generate transfer call tool config for Retell LLM general_tools
+ * This is the native Retell transfer_call tool (not a custom function tool)
+ */
+export function getTransferCallToolConfig(
+  transferNumber: string,
+  transferPersonName?: string
+): { type: 'transfer_call'; name: string; description: string; number: string } {
+  return {
+    type: 'transfer_call',
+    name: 'transfer_call',
+    description: `Transfer the call to ${transferPersonName || 'a team member'} when the caller requests a live person or meets transfer criteria.`,
+    number: transferNumber,
+  };
+}
+
+/**
  * Get all custom tools for an agent based on their active integrations
  */
 export async function getAgentCustomTools(agentId: string, integrations: string[]): Promise<RetellCustomTool[]> {

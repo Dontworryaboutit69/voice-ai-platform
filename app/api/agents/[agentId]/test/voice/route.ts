@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Retell from 'retell-sdk';
 import { createServiceClient } from '@/lib/supabase/client';
-import { getAppUrl } from '@/lib/retell-tools';
+import { getAppUrl, getTransferCallToolConfig } from '@/lib/retell-tools';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
@@ -58,6 +58,12 @@ export async function POST(
 
     // Configure tools for specific agent types
     const tools: any[] = [];
+
+    // Add transfer_call tool if agent has transfer enabled
+    if (agent.transfer_enabled && agent.transfer_number) {
+      tools.push(getTransferCallToolConfig(agent.transfer_number, agent.transfer_person_name));
+      console.log(`[test/voice] Added transfer_call tool → ${agent.transfer_number}`);
+    }
 
     // Add RentCast property valuation tool for real estate agents
     if (agent.business_type === 'real-estate' || agent.business_name?.toLowerCase().includes('homevanna')) {
