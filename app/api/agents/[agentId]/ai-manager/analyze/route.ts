@@ -29,9 +29,10 @@ export async function POST(
 
     const supabase = createServiceClient();
     const startTime = Date.now();
-    // Each Claude call takes 5-15s. Reserve 20s for the last eval + pattern analysis.
-    const MAX_EVAL_MS = 35000;
-    const MAX_TOTAL_MS = 50000;
+    // Each Claude call takes 5-15s. Be conservative to avoid Vercel 60s timeout.
+    const MAX_EVAL_MS = 30000; // Stop starting new evals after 30s
+    const MAX_TOTAL_MS = 45000; // Stop all work after 45s
+    const MAX_EVALS_PER_RUN = 3; // Limit evals per request to stay well within timeout
 
     // Step 1: Evaluate any un-evaluated calls
     const startDate = new Date();
@@ -77,10 +78,10 @@ export async function POST(
     let apiBillingError = false;
 
     for (const call of unevaluatedCalls) {
-      // Check if we're running low on time for evaluations
-      if (Date.now() - startTime > MAX_EVAL_MS) {
+      // Check batch limit and time limit
+      if (evaluatedCount >= MAX_EVALS_PER_RUN || Date.now() - startTime > MAX_EVAL_MS) {
         const remaining = unevaluatedCalls.length - evaluatedCount - evalErrors - skippedCount;
-        console.log(`[ai-manager/analyze] Approaching eval time limit (${Math.round((Date.now() - startTime) / 1000)}s), stopping. ${remaining} calls remaining.`);
+        console.log(`[ai-manager/analyze] Batch limit reached (${evaluatedCount} evals, ${Math.round((Date.now() - startTime) / 1000)}s). ${remaining} calls remaining.`);
         timedOut = true;
         break;
       }

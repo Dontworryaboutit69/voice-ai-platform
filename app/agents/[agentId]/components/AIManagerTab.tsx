@@ -146,41 +146,67 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
     }
   }
 
+  async function runSingleBatch(): Promise<{ success: boolean; data?: any; error?: string }> {
+    const res = await fetch(`/api/agents/${agentId}/ai-manager/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ daysSince: 7 })
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` };
+    return { success: true, data };
+  }
+
   async function triggerPatternAnalysis() {
     try {
       setAnalyzingPatterns(true);
-      setStatusMessage('Running pattern analysis... This may take 30-60 seconds.');
 
-      // Create a timeout promise (2 minutes)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Analysis timed out after 2 minutes')), 120000);
-      });
+      let totalEvaluated = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+      let batchNum = 0;
+      const maxBatches = 15; // Safety limit
 
-      // Race between fetch and timeout
-      const fetchPromise = fetch(`/api/agents/${agentId}/ai-manager/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ daysSince: 7 })
-      });
+      while (batchNum < maxBatches) {
+        batchNum++;
+        setStatusMessage(`Analyzing calls (batch ${batchNum})... This may take a moment.`);
 
-      const res = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-      const data = await res.json();
+        const result = await runSingleBatch();
 
-      if (data.success) {
-        const parts = [`Evaluated ${data.evaluated || 0} calls`];
-        if (data.skipped) parts.push(`skipped ${data.skipped} non-interactive`);
-        if (data.patternsAnalyzed) parts.push('pattern analysis complete');
+        if (!result.success) {
+          setStatusMessage(`❌ ${result.error}`);
+          setTimeout(() => setStatusMessage(null), 8000);
+          return;
+        }
+
+        const data = result.data;
+        totalEvaluated += data.evaluated || 0;
+        totalSkipped += data.skipped || 0;
+        totalErrors += data.errors || 0;
+
+        // If there are still more calls to process, continue automatically
+        if (data.timedOut) {
+          setStatusMessage(`Evaluated ${totalEvaluated} calls so far... continuing (batch ${batchNum + 1})`);
+          await loadData(); // Refresh UI with partial results
+          continue;
+        }
+
+        // All done
+        const parts = [`Evaluated ${totalEvaluated} calls`];
+        if (totalSkipped) parts.push(`skipped ${totalSkipped} non-interactive`);
+        if (data.patternsAnalyzed) parts.push('suggestions generated');
         if (data.patternError) parts.push(`Note: ${data.patternError}`);
-        if (data.timedOut) parts.push('Click "Run Analysis" again to continue with remaining calls');
 
-        setStatusMessage(`✅ ${parts.join('. ')}.`);
+        setStatusMessage(`✅ Analysis complete! ${parts.join(', ')}.`);
         await loadData();
-        setTimeout(() => setStatusMessage(null), data.timedOut ? 10000 : 5000);
-      } else {
-        setStatusMessage(`❌ ${data.error || 'Analysis failed. Check server logs.'}`);
-        console.error('Analysis failed:', data.error);
-        setTimeout(() => setStatusMessage(null), 8000);
+        setTimeout(() => setStatusMessage(null), 5000);
+        return;
       }
+
+      // Hit max batches
+      setStatusMessage(`✅ Evaluated ${totalEvaluated} calls across ${batchNum} batches. Click again if more remain.`);
+      await loadData();
+      setTimeout(() => setStatusMessage(null), 8000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setStatusMessage(`❌ Error: ${errorMessage}`);
