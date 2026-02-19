@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Retell from 'retell-sdk';
 import { createServiceClient } from '@/lib/supabase/client';
+import { getAppUrl } from '@/lib/retell-tools';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
@@ -37,9 +38,8 @@ export async function POST(request: NextRequest) {
       apiKey: RETELL_API_KEY,
     });
 
-    // Configure webhook URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // Configure webhook URL (getAppUrl ensures production URL for Retell)
+    const appUrl = getAppUrl();
 
     const webhookUrl = `${appUrl}/api/webhooks/retell/call-events`;
 

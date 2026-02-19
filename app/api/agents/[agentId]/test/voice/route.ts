@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Retell from 'retell-sdk';
 import { createServiceClient } from '@/lib/supabase/client';
+import { getAppUrl } from '@/lib/retell-tools';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
@@ -60,8 +61,7 @@ export async function POST(
 
     // Add RentCast property valuation tool for real estate agents
     if (agent.business_type === 'real-estate' || agent.business_name?.toLowerCase().includes('homevanna')) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      const appUrl = getAppUrl();
 
       tools.push({
         type: 'custom',
@@ -94,8 +94,7 @@ export async function POST(
       .single();
 
     if (ghlIntegration && ghlIntegration.config?.calendar_id) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      const appUrl = getAppUrl();
 
       // Add calendar availability checking tool
       tools.push({
@@ -232,8 +231,7 @@ export async function POST(
       }
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const appUrl = getAppUrl();
 
     const agentConfig: any = {
       agent_name: agent.business_name,

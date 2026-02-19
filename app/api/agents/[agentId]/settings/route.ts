@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
+import { getAppUrl } from '@/lib/retell-tools';
 
 export async function PUT(
   request: NextRequest,
@@ -52,8 +53,7 @@ export async function PUT(
     if (data.retell_agent_id) {
       try {
         // Configure webhook URL to ensure calls are tracked
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+        const appUrl = getAppUrl();
 
         await fetch(`https://api.retellai.com/update-agent`, {
           method: 'PATCH',

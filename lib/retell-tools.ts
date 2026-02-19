@@ -24,11 +24,21 @@ export interface RetellCustomTool {
 }
 
 /**
- * Get the app URL for webhook/tool endpoints
+ * Get the app URL for Retell-facing webhook/tool endpoints.
+ * Retell servers must be able to reach these URLs from the internet,
+ * so localhost is never valid here — we fall back to production.
  */
+const PRODUCTION_URL = 'https://voice-ai-platform-phi.vercel.app';
+
 export function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const url = process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+
+  // Retell can't reach localhost — always use production URL in that case
+  if (!url || url.includes('localhost') || url.includes('127.0.0.1')) {
+    return PRODUCTION_URL;
+  }
+  return url;
 }
 
 /**
