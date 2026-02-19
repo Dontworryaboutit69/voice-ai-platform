@@ -10,10 +10,13 @@ export class GoHighLevelIntegration extends BaseIntegration {
   private baseUrlV2 = 'https://services.leadconnectorhq.com';
   private apiKey: string;
   private locationId: string;
+  private isOAuth: boolean;
 
   constructor(connection: any) {
     super(connection);
-    this.apiKey = connection.api_key || '';
+    // Support both OAuth (access_token) and legacy API key connections
+    this.isOAuth = connection.auth_type === 'oauth';
+    this.apiKey = connection.access_token || connection.api_key || '';
     this.locationId = connection.config?.location_id || '';
   }
 
@@ -25,9 +28,32 @@ export class GoHighLevelIntegration extends BaseIntegration {
     return 'GoHighLevel';
   }
 
-  private getHeaders() {
+  /**
+   * For OAuth connections, refresh the token if needed before making API calls
+   */
+  private async ensureValidAuth(): Promise<string> {
+    if (!this.isOAuth) {
+      return this.apiKey; // API key doesn't expire
+    }
+
+    // Check if token needs refresh
+    const { ensureValidToken } = await import('@/lib/services/oauth-token-refresh.service');
+    const validToken = await ensureValidToken(this.connection.id, 'gohighlevel');
+
+    if (validToken) {
+      this.apiKey = validToken; // Update in-memory token
+      return validToken;
+    }
+
+    // If refresh failed, try with current token anyway
+    console.warn('[GHL] Token refresh returned null, using current token');
+    return this.apiKey;
+  }
+
+  private async getHeaders() {
+    const token = await this.ensureValidAuth();
     return {
-      'Authorization': `Bearer ${this.apiKey}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Version': '2021-07-28',
     };
@@ -36,7 +62,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
   async validateConnection(): Promise<IntegrationResponse<boolean>> {
     try {
       const response = await fetch(`${this.baseUrlV2}/locations/${this.locationId}`, {
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
       });
 
       if (response.ok) {
@@ -86,7 +112,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/contacts/`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -147,7 +173,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/contacts/${contactId}`, {
         method: 'PUT',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -182,7 +208,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       console.log('[GHL] Finding contact via v2:', searchUrl);
 
       const response = await fetch(searchUrl, {
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
       });
 
       if (!response.ok) {
@@ -227,7 +253,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/contacts/${data.contactId}/notes`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -276,7 +302,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
       console.log('[GHL] Trying v2 free-slots:', freeSlotsUrl);
 
       const freeSlotsResponse = await fetch(freeSlotsUrl, {
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
       });
 
       if (freeSlotsResponse.ok) {
@@ -322,7 +348,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
         for (const v2Url of v2Urls) {
           console.log('[GHL] Trying v2 events list:', v2Url);
-          const v2Response = await fetch(v2Url, { headers: this.getHeaders() });
+          const v2Response = await fetch(v2Url, { headers: await this.getHeaders() });
           if (v2Response.ok) {
             const v2Result = await v2Response.json();
             bookedAppointments = v2Result.events || v2Result.appointments || [];
@@ -446,7 +472,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/calendars/events/appointments`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -486,7 +512,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/workflows/${workflowId}/subscribe`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -508,7 +534,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(
         `${this.baseUrlV2}/calendars/?locationId=${this.locationId}`,
-        { headers: this.getHeaders() }
+        { headers: await this.getHeaders() }
       );
 
       if (!response.ok) {
@@ -536,7 +562,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(
         `${this.baseUrlV2}/opportunities/pipelines?locationId=${this.locationId}`,
-        { headers: this.getHeaders() }
+        { headers: await this.getHeaders() }
       );
 
       if (!response.ok) {
@@ -560,7 +586,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(
         `${this.baseUrlV2}/opportunities/pipelines/${pipelineId}`,
-        { headers: this.getHeaders() }
+        { headers: await this.getHeaders() }
       );
 
       if (!response.ok) {
@@ -584,7 +610,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(
         `${this.baseUrlV2}/workflows/?locationId=${this.locationId}`,
-        { headers: this.getHeaders() }
+        { headers: await this.getHeaders() }
       );
 
       if (!response.ok) {
@@ -621,7 +647,7 @@ export class GoHighLevelIntegration extends BaseIntegration {
 
       const response = await fetch(`${this.baseUrlV2}/opportunities/`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(payload),
       });
 

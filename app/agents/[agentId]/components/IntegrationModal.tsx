@@ -66,11 +66,8 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
       name: 'GoHighLevel',
       icon: 'GHL',
       color: 'purple',
-      authType: 'api_key',
-      fields: [
-        { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'Enter your GoHighLevel API key', required: true },
-        { key: 'location_id', label: 'Location ID', type: 'text', placeholder: 'Your GHL Location ID', required: true }
-      ],
+      authType: 'oauth',
+      oauthProvider: 'crm',
       settings: []
     },
     'hubspot': {

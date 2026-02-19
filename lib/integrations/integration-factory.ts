@@ -97,9 +97,9 @@ export class IntegrationFactory {
       gohighlevel: {
         name: 'GoHighLevel',
         description: 'Full CRM integration with contacts, notes, appointments, and workflows',
-        authType: 'api_key' as const,
+        authType: 'oauth' as const,
         icon: '🚀',
-        setupUrl: 'https://app.gohighlevel.com/settings/integrations',
+        setupUrl: 'https://marketplace.gohighlevel.com',
         features: [
           'Contact management',
           'Call notes with recordings',
@@ -224,9 +224,7 @@ export class IntegrationFactory {
         break;
 
       case 'gohighlevel':
-        if (!config.location_id) {
-          errors.push('location_id is required for GoHighLevel');
-        }
+        // OAuth flow auto-populates location_id, only required for API key mode
         break;
 
       case 'zapier':
@@ -298,6 +296,19 @@ export class IntegrationFactory {
 
       case 'salesforce':
         return ['full', 'refresh_token'];
+
+      case 'gohighlevel':
+        return [
+          'contacts.readonly', 'contacts.write',
+          'conversations.readonly', 'conversations.write',
+          'calendars.readonly', 'calendars.write',
+          'calendars/events.readonly', 'calendars/events.write',
+          'locations.readonly',
+          'opportunities.readonly', 'opportunities.write',
+          'workflows.readonly',
+          'users.readonly',
+          'oauth.readonly', 'oauth.write',
+        ];
 
       case 'calendly':
         return []; // Calendly doesn't use scopes in URL
