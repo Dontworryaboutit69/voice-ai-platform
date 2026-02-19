@@ -37,13 +37,13 @@ Scan every dialogue line. Real phone conversations are SHORT.
 - Remove corporate filler: "I understand your concern" / "I appreciate you sharing that" / "That's a great question" → Cut entirely or replace with natural reactions ("Gotcha" / "Oh yeah" / "Makes sense")
 - Check the opening greeting — keep it under 15 words. Long intros = hangups.
 
-### 2. HUMAN MOMENTS (What Makes It Feel Real)
-Add 2-3 context-aware reactions during qualification. These are SHORT one-liners:
-- After they name a specific company/carrier/product: "Oh nice, we work with them pretty regularly"
-- After they mention recent urgency: "Good thing you're calling now"
-- After they give a location you cover: "Oh yeah, we're out there all the time"
-- After good news: "Oh that's great" / After bad news: "Oh no, sorry to hear that"
-These should feel like the agent is LISTENING, not just collecting data.
+### 2. HUMAN MOMENTS & NARRATIVE AWARENESS (What Makes It Feel Real)
+Add 2-3 context-aware reactions during qualification. These must be SPECIFIC to what the caller actually said, not generic:
+- After specific revenue/numbers: "Oh wow, a hundred fifty a month? Yeah you're in great shape" (NOT just "Excellent, that's solid revenue")
+- After they explain their situation: Connect the dots — "Cash flow and payroll — yeah that's super common when you're growing fast. Good problem to have honestly."
+- After industry mention: Show you know it — "Oh nice, renovations are huge right now" (NOT just "Good industry for funding")
+- After urgency: "Good thing you're calling now — we can usually move pretty quick on this"
+The agent should demonstrate NARRATIVE AWARENESS — connecting the caller's answers into a story (they're growing, they need capital to keep up, they're a good fit). Not just collecting data points.
 
 ### 3. OBJECTION HANDLING — ONE AND PIVOT
 Check every objection response. The pattern should be:
@@ -66,10 +66,29 @@ Check the function reference section:
 - Scheduling language: Replace passive "Would you like to schedule?" with assumptive "What works better, mornings or afternoons?"
 - ONE attempt to schedule. If declined → pivot to email/callback. Never ask twice.
 
-### 6. REPETITION GUARD
-Check that the prompt has a rule (either explicit or demonstrated in the flow): "Never re-ask for information the caller already provided." If the caller says their name in the greeting, don't ask for it again.
+### 6. REPETITION GUARD & PUSHBACK HANDLING
+Check that the prompt has a rule: "Never re-ask for information the caller already provided."
+ALSO check: When a caller pushes back on a question ("Why do you need that?" / "Don't you have my info already?"), the prompt must NOT re-ask the same question verbatim. It should:
+- Give a brief, casual explanation (not corporate)
+- Rephrase the question differently
+- Keep it light ("Ha, fair point!" / "Oh totally, just wanna make sure...")
+If any objection or pushback response re-asks the exact same question word-for-word, REWRITE it.
 
-### 7. SPEECH QUALITY
+### 7. VALUE BRIDGE
+Check the transition from qualification to contact collection. There MUST be a value bridge — a 1-2 sentence summary that echoes what the caller said and connects it to why they're a good fit BEFORE asking for contact info.
+BAD: [Last qual question] → "Awesome! Can I get your full name?"
+GOOD: [Last qual question] → "Okay so a hundred K for cash flow, with your revenue you're definitely in range. Let me grab a few details and we'll get you set up."
+If the value bridge is missing, ADD one. If it's generic ("Based on what you've told me, you'd be a great fit"), make it SPECIFIC to what the caller actually said.
+
+### 8. PERSONALITY CHECK
+The personality section must read like a CHARACTER description, not a template. Check for:
+- Does it mention what this person CARES about? (not just how they talk)
+- Are the reactions INDUSTRY-SPECIFIC? (a lending agent reacts differently than a dental agent)
+- Does it have verbal HABITS? (starting phrases, trailing phrases, energy level)
+- Would you be able to distinguish this personality from ANY other agent? If not, it's too generic — enhance it.
+If the personality is just word substitutions ("says 'yeah' instead of 'yes'"), REWRITE it as a character description.
+
+### 9. SPEECH QUALITY
 - ALL dialogue lines have SSML breaks (<break time='.2s'/> or <break time='.3s'/>)
 - Contractions always (we're, you'll, that's — NEVER "we are", "you will")
 - Sentence length SHORT — under 20 words each
@@ -85,10 +104,54 @@ Check that the prompt has a rule (either explicit or demonstrated in the flow): 
 5. FINAL SIZE: Within 10-15% of input size. If you added 500 chars of good stuff, trim 300-500 chars of bad stuff elsewhere.`;
 
 /* ─── Website Scraper ─── */
-async function scrapeWebsite(url: string): Promise<string | null> {
+
+// Method 1: Jina Reader API (free, handles JS-rendered sites, returns markdown)
+async function scrapeWithJina(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+    const response = await fetch(`https://r.jina.ai/${url}`, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'text/plain',
+        'X-Return-Format': 'text',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return null;
+
+    let text = await response.text();
+
+    // Clean up the output
+    text = text
+      .replace(/\[.*?\]\(.*?\)/g, (match) => {
+        // Keep link text, remove URL for cleaner output
+        const linkText = match.match(/\[(.*?)\]/)?.[1] || '';
+        return linkText;
+      })
+      .replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
+      .replace(/\n{3,}/g, '\n\n') // Collapse excessive newlines
+      .trim();
+
+    // Limit to ~5000 chars
+    if (text.length > 5000) {
+      text = text.substring(0, 5000) + '...';
+    }
+
+    return text.length > 100 ? text : null;
+  } catch (error) {
+    console.log('[generate] Jina scrape failed:', error);
+    return null;
+  }
+}
+
+// Method 2: Fallback raw HTML fetch (for simple sites)
+async function scrapeWithFetch(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     const response = await fetch(url, {
       signal: controller.signal,
@@ -102,35 +165,51 @@ async function scrapeWebsite(url: string): Promise<string | null> {
 
     const html = await response.text();
 
-    // Strip HTML to plain text
     let text = html
-      // Remove script and style blocks entirely
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
-      // Remove HTML tags
       .replace(/<[^>]+>/g, ' ')
-      // Decode common HTML entities
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&nbsp;/g, ' ')
-      // Clean up whitespace
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Limit to ~4000 chars to avoid overwhelming the prompt
-    if (text.length > 4000) {
-      text = text.substring(0, 4000) + '...';
+    if (text.length > 5000) {
+      text = text.substring(0, 5000) + '...';
     }
 
-    return text.length > 50 ? text : null; // Skip if too short to be useful
+    return text.length > 100 ? text : null;
   } catch (error) {
-    console.log('[generate] Website scrape failed:', error);
+    console.log('[generate] Raw fetch scrape failed:', error);
     return null;
   }
+}
+
+// Main scraper: try Jina first (handles JS sites), fallback to raw fetch
+async function scrapeWebsite(url: string): Promise<string | null> {
+  console.log(`[generate] Attempting Jina Reader scrape for: ${url}`);
+  let content = await scrapeWithJina(url);
+
+  if (content) {
+    console.log(`[generate] ✅ Jina scrape success: ${content.length} chars`);
+    return content;
+  }
+
+  console.log(`[generate] Jina failed, falling back to raw fetch for: ${url}`);
+  content = await scrapeWithFetch(url);
+
+  if (content) {
+    console.log(`[generate] ✅ Raw fetch success: ${content.length} chars`);
+    return content;
+  }
+
+  console.log(`[generate] ❌ All scrape methods failed for: ${url}`);
+  return null;
 }
 
 /* ─── Section Parser ─── */
