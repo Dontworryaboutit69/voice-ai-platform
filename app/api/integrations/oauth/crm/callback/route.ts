@@ -18,12 +18,12 @@ export async function GET(request: NextRequest) {
     // Handle OAuth errors from GHL
     if (error) {
       console.error('[GHL OAuth] Authorization error:', error);
-      return renderResult(false, 'Authorization was denied or failed. Please try again.');
+      return renderResult(false, `GHL auth error: ${error}`);
     }
 
     if (!code || !state) {
-      console.error('[GHL OAuth] Missing code or state');
-      return renderResult(false, 'Invalid callback. Missing authorization code or state.');
+      console.error('[GHL OAuth] Missing code or state. code:', !!code, 'state:', !!state);
+      return renderResult(false, `Missing params - code: ${!!code}, state: ${!!state}`);
     }
 
     // Validate CSRF state token
@@ -36,14 +36,14 @@ export async function GET(request: NextRequest) {
 
     if (stateError || !stateRecord) {
       console.error('[GHL OAuth] Invalid state token:', stateError);
-      return renderResult(false, 'Invalid or expired session. Please try connecting again.');
+      return renderResult(false, `State validation failed: ${stateError?.message || 'no record found'} (state=${state.substring(0, 8)}...)`);
     }
 
     // Check if state is expired
     if (new Date(stateRecord.expires_at) < new Date()) {
       console.error('[GHL OAuth] State token expired');
       await supabase.from('oauth_states').delete().eq('id', stateRecord.id);
-      return renderResult(false, 'Session expired. Please try connecting again.');
+      return renderResult(false, `Session expired. Created: ${stateRecord.expires_at}`);
     }
 
     const agentId = stateRecord.agent_id;
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorBody = await tokenResponse.text();
       console.error('[GHL OAuth] Token exchange failed:', tokenResponse.status, errorBody);
-      return renderResult(false, 'Failed to complete authorization. Please try again.');
+      return renderResult(false, `Token exchange failed (${tokenResponse.status}): ${errorBody.substring(0, 200)}`);
     }
 
     const tokens = await tokenResponse.json();
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
 
       if (updateError) {
         console.error('[GHL OAuth] Failed to update connection:', updateError);
-        return renderResult(false, 'Failed to save connection. Please try again.');
+        return renderResult(false, `DB update failed: ${updateError.message}`);
       }
       console.log('[GHL OAuth] Updated existing connection:', existing.id);
     } else {
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
 
       if (insertError) {
         console.error('[GHL OAuth] Failed to create connection:', insertError);
-        return renderResult(false, 'Failed to save connection. Please try again.');
+        return renderResult(false, `DB insert failed: ${insertError.message}`);
       }
       console.log('[GHL OAuth] Created new connection for agent:', agentId);
     }
@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
     return renderResult(true, `Connected to ${locationName}!`, agentId, locationId);
   } catch (error: any) {
     console.error('[GHL OAuth] Unexpected error in callback:', error);
-    return renderResult(false, 'An unexpected error occurred. Please try again.');
+    return renderResult(false, `Unexpected error: ${error.message || error}`);
   }
 }
 
