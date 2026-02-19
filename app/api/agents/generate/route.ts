@@ -759,7 +759,12 @@ CRITICAL REQUIREMENTS:
       } catch (retellError: any) {
         // Don't fail the whole request if Retell creation fails
         // The agent is still created in our DB and the prompt is saved
-        console.error('[generate] ⚠️ Retell creation failed (agent still saved in DB):', retellError?.message);
+        const retellErrMsg = retellError?.message || 'unknown error';
+        const retellErrDetails = retellError?.response?.data || retellError?.body || retellErrMsg;
+        console.error('[generate] ⚠️ Retell creation failed (agent still saved in DB):', retellErrMsg);
+        console.error('[generate] Retell error details:', JSON.stringify(retellErrDetails));
+        // Pass error in response for debugging
+        retellLlmId = `ERROR: ${retellErrMsg}` as any;
       }
     } else {
       console.warn('[generate] ⚠️ RETELL_API_KEY not set — skipping Retell agent creation');
@@ -770,6 +775,11 @@ CRITICAL REQUIREMENTS:
       agentId: agent.id,
       promptVersionId: promptVersion.id,
       retellAgentId: retellAgentId || undefined,
+      retellLlmId: retellLlmId || undefined,
+      debug: {
+        retellKeyPresent: !!RETELL_API_KEY,
+        retellKeyLength: RETELL_API_KEY.length,
+      }
     });
 
   } catch (error: any) {
