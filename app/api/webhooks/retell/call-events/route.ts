@@ -108,6 +108,10 @@ async function handleCallEnded(
   // ------------------------------------------------------------------
   // 1. Update call record
   // ------------------------------------------------------------------
+  // Extract latency metrics from Retell's response
+  const latency = callData.latency as Record<string, any> | undefined;
+  const callCost = callData.call_cost as Record<string, any> | undefined;
+
   const { data: updatedCall, error: updateError } = await supabase
     .from("calls")
     .update({
@@ -117,6 +121,15 @@ async function handleCallEnded(
       ended_at: (callData.end_timestamp as string) ?? new Date().toISOString(),
       duration_ms: durationMs,
       call_status: "completed",
+      // Dashboard analytics fields
+      disconnection_reason: (callData.disconnection_reason as string) ?? null,
+      transfer_destination: (callData.transfer_destination as string) ?? null,
+      e2e_latency_p50: latency?.e2e?.p50 ?? null,
+      e2e_latency_p90: latency?.e2e?.p90 ?? null,
+      e2e_latency_p99: latency?.e2e?.p99 ?? null,
+      call_cost_cents: callCost?.combined_cost != null
+        ? Math.round(callCost.combined_cost * 100)
+        : null,
     })
     .eq("retell_call_id", retellCallId)
     .select("id")
@@ -495,11 +508,18 @@ async function handleCallAnalyzed(
   const retellCallId = callData.call_id as string;
   const analysis = callData.call_analysis as Record<string, unknown> | undefined;
 
+  // Build update payload with analysis + promoted columns for dashboard aggregation
+  const updatePayload: Record<string, any> = {
+    call_analysis: analysis ?? null,
+  };
+  if (analysis) {
+    updatePayload.user_sentiment = (analysis.user_sentiment as string) ?? null;
+    updatePayload.call_successful = (analysis.call_successful as boolean) ?? null;
+  }
+
   const { error } = await supabase
     .from("calls")
-    .update({
-      call_analysis: analysis ?? null,
-    })
+    .update(updatePayload)
     .eq("retell_call_id", retellCallId);
 
   if (error) {

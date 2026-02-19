@@ -88,6 +88,11 @@ export async function POST(request: NextRequest) {
         console.log(`[sync-calls] Call ${call.call_id} - No status, using: ${normalizedStatus}`);
       }
 
+      // Extract latency and cost data for dashboard analytics
+      const latency = (call as any).latency;
+      const callCost = (call as any).call_cost;
+      const callAnalysis = call.call_analysis as any;
+
       const callData = {
         retell_call_id: call.call_id,
         agent_id: agentId,
@@ -100,7 +105,18 @@ export async function POST(request: NextRequest) {
         transcript_object: call.transcript_object || null,
         recording_url: call.recording_url || null,
         call_status: normalizedStatus,
-        call_analysis: call.call_analysis || null
+        call_analysis: call.call_analysis || null,
+        // Dashboard analytics fields
+        disconnection_reason: (call as any).disconnection_reason || null,
+        transfer_destination: (call as any).transfer_destination || null,
+        e2e_latency_p50: latency?.e2e?.p50 ?? null,
+        e2e_latency_p90: latency?.e2e?.p90 ?? null,
+        e2e_latency_p99: latency?.e2e?.p99 ?? null,
+        call_cost_cents: callCost?.combined_cost != null
+          ? Math.round(callCost.combined_cost * 100)
+          : null,
+        user_sentiment: callAnalysis?.user_sentiment ?? null,
+        call_successful: callAnalysis?.call_successful ?? null,
       };
 
       if (existingCall) {

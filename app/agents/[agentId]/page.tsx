@@ -8,6 +8,7 @@ import TourTooltip from './components/TourTooltip';
 import IntegrationModal from './components/IntegrationModal';
 import DataCollectionConfig from './components/DataCollectionConfig';
 import AIManagerTab from './components/AIManagerTab';
+import DashboardTab from './components/DashboardTab';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
@@ -29,7 +30,7 @@ interface PromptVersion {
   prompt_knowledge: string;
 }
 
-type Tab = 'prompt' | 'knowledge' | 'test' | 'voices' | 'calls' | 'integrations' | 'marketplace' | 'settings' | 'ai-manager' | 'scoreboard';
+type Tab = 'dashboard' | 'prompt' | 'knowledge' | 'test' | 'voices' | 'calls' | 'integrations' | 'marketplace' | 'settings' | 'ai-manager' | 'scoreboard';
 
 export default function AgentDashboard() {
   console.log('🚀 AGENT DASHBOARD LOADED - CODE VERSION 2.0');
@@ -39,7 +40,7 @@ export default function AgentDashboard() {
   const agentId = params.agentId as string;
   const [agent, setAgent] = useState<Agent | null>(null);
   const [prompt, setPrompt] = useState<PromptVersion | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('test');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
 
   // Agent switcher state
@@ -1147,6 +1148,7 @@ export default function AgentDashboard() {
         <div className="w-72 h-full bg-white border-r border-gray-200 shadow-sm">
           <nav className="p-6 space-y-2">
             {[
+              { id: 'dashboard', icon: '📊', label: 'Dashboard', badge: null, ref: null },
               { id: 'test', icon: '🧪', label: 'Test Agent', badge: null, ref: testTabRef },
               { id: 'prompt', icon: '📝', label: 'Prompt', badge: null, ref: promptTabRef },
               { id: 'knowledge', icon: '📚', label: 'Knowledge Base', badge: 'Beta', ref: knowledgeTabRef },
@@ -1192,6 +1194,14 @@ export default function AgentDashboard() {
 
         {/* Main Content Panel with Modern Cards */}
         <div className="flex-1 overflow-auto p-8 bg-gradient-to-br from-slate-50/50 via-white to-slate-50/50">
+          {/* Dashboard Tab */}
+          {activeTab === 'dashboard' && (
+            <DashboardTab
+              agentId={agentId}
+              onNavigateToTab={(tab) => setActiveTab(tab as Tab)}
+            />
+          )}
+
           {/* Test Agent Tab */}
           {activeTab === 'test' && (
             <div className="max-w-6xl mx-auto">
