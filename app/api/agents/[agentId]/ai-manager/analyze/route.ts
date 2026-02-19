@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { analyzePatterns } from '@/lib/services/ai-manager.service';
+import { analyzePatterns, evaluateCall } from '@/lib/services/ai-manager.service';
+import { createServiceClient } from '@/lib/supabase/client';
 
 /**
  * POST /api/agents/[agentId]/ai-manager/analyze
- * Manually trigger pattern analysis for an agent
+ * Manually trigger call evaluation + pattern analysis for an agent.
+ *
+ * Step 1: Find all calls that haven't been evaluated yet and evaluate them.
+ * Step 2: Run pattern analysis across all evaluations to generate suggestions.
  */
 export async function POST(
   request: Request,
@@ -20,14 +24,71 @@ export async function POST(
       // No body provided, use default
     }
 
-    console.log(`[ai-manager/analyze] Analyzing patterns for agent ${agentId} (last ${daysSince} days)`);
+    const supabase = createServiceClient();
 
-    // Run pattern analysis
+    // Step 1: Evaluate any un-evaluated calls
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysSince);
+
+    // Get all completed calls with transcripts in the time window
+    const { data: calls, error: callsError } = await supabase
+      .from('calls')
+      .select('id')
+      .eq('agent_id', agentId)
+      .eq('call_status', 'completed')
+      .not('transcript', 'is', null)
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (callsError) {
+      console.error('[ai-manager/analyze] Error fetching calls:', callsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch calls' },
+        { status: 500 }
+      );
+    }
+
+    // Get already-evaluated call IDs
+    const { data: existingEvals } = await supabase
+      .from('ai_call_evaluations')
+      .select('call_id')
+      .eq('agent_id', agentId)
+      .gte('created_at', startDate.toISOString());
+
+    const evaluatedCallIds = new Set((existingEvals || []).map(e => e.call_id));
+
+    // Filter to un-evaluated calls
+    const unevaluatedCalls = (calls || []).filter(c => !evaluatedCallIds.has(c.id));
+
+    console.log(`[ai-manager/analyze] Found ${calls?.length || 0} calls, ${unevaluatedCalls.length} need evaluation`);
+
+    // Evaluate each un-evaluated call
+    let evaluatedCount = 0;
+    let evalErrors = 0;
+    for (const call of unevaluatedCalls) {
+      try {
+        console.log(`[ai-manager/analyze] Evaluating call ${call.id}...`);
+        await evaluateCall(call.id);
+        evaluatedCount++;
+      } catch (error) {
+        evalErrors++;
+        console.error(`[ai-manager/analyze] Failed to evaluate call ${call.id}:`, error);
+        // Continue with other calls
+      }
+    }
+
+    console.log(`[ai-manager/analyze] Evaluated ${evaluatedCount} calls (${evalErrors} errors)`);
+
+    // Step 2: Run pattern analysis across all evaluations
+    console.log(`[ai-manager/analyze] Running pattern analysis for agent ${agentId} (last ${daysSince} days)`);
     await analyzePatterns(agentId, daysSince);
 
     return NextResponse.json({
       success: true,
-      message: `Pattern analysis completed for last ${daysSince} days`,
+      message: `Evaluated ${evaluatedCount} calls, then ran pattern analysis for last ${daysSince} days`,
+      evaluated: evaluatedCount,
+      errors: evalErrors,
+      totalCalls: calls?.length || 0,
     });
   } catch (error) {
     console.error('[ai-manager/analyze POST] Error:', error);
@@ -48,7 +109,6 @@ export async function GET(
 ) {
   try {
     const { agentId } = await params;
-    const { createServiceClient } = await import('@/lib/supabase/client');
     const supabase = createServiceClient();
 
     const { data: analyses, error } = await supabase
