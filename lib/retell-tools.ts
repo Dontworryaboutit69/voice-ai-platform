@@ -122,18 +122,31 @@ export function getBookAppointmentTool(agentId: string): RetellCustomTool {
 }
 
 /**
- * Generate transfer call tool config for Retell LLM general_tools
- * This is the native Retell transfer_call tool (not a custom function tool)
+ * Generate transfer call tool config for Retell LLM general_tools.
+ * Uses the Retell v2 format: transfer_destination + transfer_option (required).
+ * Defaults to warm_transfer so the AI can announce the transfer to the caller.
  */
 export function getTransferCallToolConfig(
   transferNumber: string,
   transferPersonName?: string
-): { type: 'transfer_call'; name: string; description: string; number: string } {
+): {
+  type: 'transfer_call';
+  name: string;
+  description?: string;
+  transfer_destination: { type: 'predefined'; number: string };
+  transfer_option: { type: 'warm_transfer' };
+} {
   return {
     type: 'transfer_call',
     name: 'transfer_call',
     description: `Transfer the call to ${transferPersonName || 'a team member'} when the caller requests a live person or meets transfer criteria.`,
-    number: transferNumber,
+    transfer_destination: {
+      type: 'predefined',
+      number: transferNumber,
+    },
+    transfer_option: {
+      type: 'warm_transfer',
+    },
   };
 }
 
