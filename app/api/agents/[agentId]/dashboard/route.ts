@@ -80,10 +80,11 @@ function computeStats(calls: CallRow[]) {
   const totalDurationMs = calls.reduce((sum, c) => sum + (c.duration_ms || 0), 0);
   const totalTalkMinutes = Math.round(totalDurationMs / 60000);
 
-  // Estimated cost
-  const withCost = calls.filter(c => c.call_cost_cents != null);
-  const totalCostCents = withCost.reduce((sum, c) => sum + (c.call_cost_cents || 0), 0);
-  const estimatedCostDollars = withCost.length > 0 ? Math.round(totalCostCents) / 100 : null;
+  // Estimated cost based on per-minute pricing ($0.25/min)
+  const COST_PER_MINUTE_CENTS = 25;
+  const estimatedCostDollars = totalTalkMinutes > 0
+    ? Math.round(totalTalkMinutes * COST_PER_MINUTE_CENTS) / 100
+    : null;
 
   return {
     totalCalls,

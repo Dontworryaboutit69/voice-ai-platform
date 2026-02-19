@@ -112,9 +112,7 @@ export async function POST(request: NextRequest) {
         e2e_latency_p50: latency?.e2e?.p50 ?? null,
         e2e_latency_p90: latency?.e2e?.p90 ?? null,
         e2e_latency_p99: latency?.e2e?.p99 ?? null,
-        call_cost_cents: callCost?.combined_cost != null
-          ? Math.round(callCost.combined_cost * 100)
-          : null,
+        call_cost_cents: callCost?.combined_cost ?? null,
         user_sentiment: callAnalysis?.user_sentiment ?? null,
         call_successful: callAnalysis?.call_successful ?? null,
       };

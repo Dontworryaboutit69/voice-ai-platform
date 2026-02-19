@@ -127,9 +127,7 @@ async function handleCallEnded(
       e2e_latency_p50: latency?.e2e?.p50 ?? null,
       e2e_latency_p90: latency?.e2e?.p90 ?? null,
       e2e_latency_p99: latency?.e2e?.p99 ?? null,
-      call_cost_cents: callCost?.combined_cost != null
-        ? Math.round(callCost.combined_cost * 100)
-        : null,
+      call_cost_cents: callCost?.combined_cost ?? null,
     })
     .eq("retell_call_id", retellCallId)
     .select("id")
