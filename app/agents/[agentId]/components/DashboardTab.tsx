@@ -34,6 +34,11 @@ interface CallVolumePoint {
   count: number;
 }
 
+interface DurationTrendPoint {
+  date: string;
+  avgMs: number;
+}
+
 interface RecentCall {
   id: string;
   retell_call_id: string;
@@ -92,14 +97,12 @@ function getDominantSentiment(breakdown: DashboardStats['sentimentBreakdown']): 
 
 function getCallerInitial(fromNumber: string | null): string {
   if (!fromNumber) return '?';
-  // Return last digit or first non-+ character
   const clean = fromNumber.replace(/\D/g, '');
   return clean.length > 0 ? clean[clean.length - 1] : '?';
 }
 
 function formatPhoneNumber(phone: string | null): string {
   if (!phone) return 'Unknown Caller';
-  // Simple formatting: (xxx) xxx-xxxx
   const clean = phone.replace(/\D/g, '');
   if (clean.length === 11 && clean[0] === '1') {
     return `(${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
@@ -110,7 +113,14 @@ function formatPhoneNumber(phone: string | null): string {
   return phone;
 }
 
-// ─── Sparkline SVG ────────────────────────────────────────────────────────────
+function formatDurationFromMs(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// ─── Sparkline SVG (decorative) ──────────────────────────────────────────────
 
 function Sparkline({ color }: { color: string }) {
   return (
@@ -136,7 +146,7 @@ function Sparkline({ color }: { color: string }) {
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card ───────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -179,7 +189,219 @@ function StatCard({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Donut / Pie Chart (SVG) ─────────────────────────────────────────────────
+
+function SentimentDonut({ breakdown }: { breakdown: DashboardStats['sentimentBreakdown'] }) {
+  const total = breakdown.positive + breakdown.neutral + breakdown.negative + breakdown.unknown;
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="60" fill="none" stroke="#F3F4F6" strokeWidth="20" />
+        </svg>
+        <p className="text-sm text-gray-400 mt-2">No sentiment data</p>
+      </div>
+    );
+  }
+
+  const segments = [
+    { label: 'Positive', count: breakdown.positive, color: '#10B981' },
+    { label: 'Neutral', count: breakdown.neutral, color: '#F59E0B' },
+    { label: 'Negative', count: breakdown.negative, color: '#EF4444' },
+    { label: 'Unknown', count: breakdown.unknown, color: '#D1D5DB' },
+  ].filter(s => s.count > 0);
+
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative">
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          {segments.map((seg) => {
+            const pct = seg.count / total;
+            const dashLen = pct * circumference;
+            const dashGap = circumference - dashLen;
+            const currentOffset = offset;
+            offset += dashLen;
+            return (
+              <circle
+                key={seg.label}
+                cx="80"
+                cy="80"
+                r={radius}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth="20"
+                strokeDasharray={`${dashLen} ${dashGap}`}
+                strokeDashoffset={-currentOffset}
+                transform="rotate(-90 80 80)"
+                className="transition-all duration-500"
+              />
+            );
+          })}
+        </svg>
+        {/* Center text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-2xl font-bold text-gray-900">{total}</p>
+          <p className="text-[10px] text-gray-400">total</p>
+        </div>
+      </div>
+      {/* Legend */}
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3">
+        {segments.map((seg) => (
+          <div key={seg.label} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: seg.color }} />
+            <span className="text-[11px] text-gray-600">
+              {seg.label} <span className="font-semibold">{Math.round((seg.count / total) * 100)}%</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Line Chart (SVG) ────────────────────────────────────────────────────────
+
+function DurationLineChart({ data }: { data: DurationTrendPoint[] }) {
+  if (data.length === 0) {
+    return (
+      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+        No duration data for this period
+      </div>
+    );
+  }
+
+  // Filter out trailing zeros for cleaner chart
+  const nonZeroData = data.filter(d => d.avgMs > 0);
+  if (nonZeroData.length === 0) {
+    return (
+      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+        No duration data for this period
+      </div>
+    );
+  }
+
+  const chartW = 500;
+  const chartH = 160;
+  const padTop = 10;
+  const padBottom = 30;
+  const padLeft = 45;
+  const padRight = 10;
+  const drawW = chartW - padLeft - padRight;
+  const drawH = chartH - padTop - padBottom;
+
+  const maxMs = Math.max(...data.map(d => d.avgMs), 1);
+  // Round up to nice number for y-axis
+  const yMax = Math.ceil(maxMs / 10000) * 10000 || 60000;
+
+  function toX(i: number): number {
+    return padLeft + (i / Math.max(data.length - 1, 1)) * drawW;
+  }
+  function toY(ms: number): number {
+    return padTop + drawH - (ms / yMax) * drawH;
+  }
+
+  // Build path
+  const points = data.map((d, i) => `${toX(i)},${toY(d.avgMs)}`);
+  const linePath = `M${points.join(' L')}`;
+  const areaPath = `${linePath} L${toX(data.length - 1)},${padTop + drawH} L${toX(0)},${padTop + drawH} Z`;
+
+  // Y-axis labels (3 ticks)
+  const yTicks = [0, yMax / 2, yMax];
+
+  // X-axis labels (show ~5 labels max)
+  const xStep = Math.max(Math.floor(data.length / 5), 1);
+
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="line-area-gradient" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Grid lines */}
+      {yTicks.map((tick) => (
+        <line
+          key={tick}
+          x1={padLeft}
+          y1={toY(tick)}
+          x2={chartW - padRight}
+          y2={toY(tick)}
+          stroke="#F3F4F6"
+          strokeWidth="1"
+        />
+      ))}
+
+      {/* Y-axis labels */}
+      {yTicks.map((tick) => (
+        <text
+          key={`y-${tick}`}
+          x={padLeft - 6}
+          y={toY(tick) + 3}
+          textAnchor="end"
+          fontSize="9"
+          fill="#9CA3AF"
+        >
+          {formatDurationFromMs(tick)}
+        </text>
+      ))}
+
+      {/* Area fill */}
+      <path d={areaPath} fill="url(#line-area-gradient)" />
+
+      {/* Line */}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="#8B5CF6"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* Data dots (only on non-zero days) */}
+      {data.map((d, i) =>
+        d.avgMs > 0 ? (
+          <circle
+            key={i}
+            cx={toX(i)}
+            cy={toY(d.avgMs)}
+            r="3"
+            fill="#8B5CF6"
+            stroke="white"
+            strokeWidth="1.5"
+          />
+        ) : null,
+      )}
+
+      {/* X-axis labels */}
+      {data.map((d, i) =>
+        i % xStep === 0 || i === data.length - 1 ? (
+          <text
+            key={`x-${i}`}
+            x={toX(i)}
+            y={chartH - 5}
+            textAnchor="middle"
+            fontSize="9"
+            fill="#9CA3AF"
+          >
+            {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            })}
+          </text>
+        ) : null,
+      )}
+    </svg>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 interface DashboardTabProps {
   agentId: string;
@@ -190,6 +412,7 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [changes, setChanges] = useState<DashboardChanges | null>(null);
   const [callVolume, setCallVolume] = useState<CallVolumePoint[]>([]);
+  const [durationTrend, setDurationTrend] = useState<DurationTrendPoint[]>([]);
   const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +432,7 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
         setStats(data.stats);
         setChanges(data.changes);
         setCallVolume(data.callVolume);
+        setDurationTrend(data.durationTrend || []);
         setRecentCalls(data.recentCalls);
       } else {
         setError(data.error || 'Failed to load dashboard data');
@@ -235,6 +459,10 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
             <div key={i} className="h-36 bg-gray-100 rounded-2xl" />
           ))}
         </div>
+        <div className="grid grid-cols-3 gap-5 mb-6">
+          <div className="col-span-2 h-64 bg-gray-100 rounded-2xl" />
+          <div className="h-64 bg-gray-100 rounded-2xl" />
+        </div>
         <div className="grid grid-cols-3 gap-5">
           <div className="col-span-2 h-64 bg-gray-100 rounded-2xl" />
           <div className="h-64 bg-gray-100 rounded-2xl" />
@@ -256,7 +484,7 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
             onClick={loadDashboard}
             className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all"
           >
-            🔄 Retry
+            Retry
           </button>
         </div>
       </div>
@@ -369,8 +597,8 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
         <span className="text-sm font-bold text-gray-900">{stats.transferRate}%</span>
       </div>
 
-      {/* Main content: Chart + Recent Calls */}
-      <div className="grid grid-cols-3 gap-5">
+      {/* Row 1: Call Volume Bar Chart + Sentiment Donut */}
+      <div className="grid grid-cols-3 gap-5 mb-6">
         {/* Call Volume Chart */}
         <div className="col-span-2 rounded-2xl p-6 bg-white border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-5">
@@ -384,25 +612,31 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
             <div className="h-48 flex items-end gap-1 px-1">
               {callVolume.map((day, i) => {
                 const heightPct = maxVolume > 0 ? (day.count / maxVolume) * 100 : 0;
-                const isLast = i === callVolume.length - 1;
                 const isToday = day.date === new Date().toISOString().split('T')[0];
+                const isLast = i === callVolume.length - 1;
                 return (
                   <div key={day.date} className="flex-1 flex flex-col items-center group relative">
                     {/* Tooltip */}
                     <div className="absolute -top-8 hidden group-hover:block bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
-                      {day.count} call{day.count !== 1 ? 's' : ''} · {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {day.count} call{day.count !== 1 ? 's' : ''} &middot;{' '}
+                      {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                     </div>
                     <div
                       className="w-full rounded-lg transition-all duration-300"
                       style={{
                         height: `${Math.max(heightPct * 1.8, day.count > 0 ? 4 : 1)}px`,
                         maxHeight: '180px',
-                        background: isLast || isToday
-                          ? 'linear-gradient(180deg, #635BFF, #8B5CF6)'
-                          : '#EEEEF4',
-                        boxShadow: isLast || isToday
-                          ? '0 4px 12px rgba(99, 91, 255, 0.25)'
-                          : 'none',
+                        background:
+                          isLast || isToday
+                            ? 'linear-gradient(180deg, #635BFF, #8B5CF6)'
+                            : '#EEEEF4',
+                        boxShadow:
+                          isLast || isToday
+                            ? '0 4px 12px rgba(99, 91, 255, 0.25)'
+                            : 'none',
                       }}
                     />
                   </div>
@@ -416,6 +650,35 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
           )}
         </div>
 
+        {/* Sentiment Donut Chart */}
+        <div className="rounded-2xl p-6 bg-white border border-gray-200 shadow-sm">
+          <div className="mb-4">
+            <p className="text-sm font-bold text-gray-900">Sentiment Breakdown</p>
+            <p className="text-xs mt-0.5 text-gray-500">How callers feel</p>
+          </div>
+          <SentimentDonut breakdown={stats.sentimentBreakdown} />
+        </div>
+      </div>
+
+      {/* Row 2: Duration Trend Line Chart + Recent Calls */}
+      <div className="grid grid-cols-3 gap-5">
+        {/* Duration Trend Line Chart */}
+        <div className="col-span-2 rounded-2xl p-6 bg-white border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Avg Duration Trend</p>
+              <p className="text-xs mt-0.5 text-gray-500">Average call duration over time</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-[3px] rounded-full bg-violet-500" />
+              <span className="text-[10px] text-gray-400">Avg duration</span>
+            </div>
+          </div>
+          <div className="h-48">
+            <DurationLineChart data={durationTrend} />
+          </div>
+        </div>
+
         {/* Recent Calls Panel */}
         <div className="rounded-2xl p-6 bg-white border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -424,7 +687,7 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
               onClick={() => onNavigateToTab('calls')}
               className="text-xs font-medium text-blue-600 hover:text-blue-700"
             >
-              View all →
+              View all &rarr;
             </button>
           </div>
 
@@ -466,7 +729,9 @@ export default function DashboardTab({ agentId, onNavigateToTab }: DashboardTabP
             <div className="text-center py-8">
               <p className="text-4xl mb-2">📞</p>
               <p className="text-sm text-gray-400">No calls yet</p>
-              <p className="text-xs text-gray-300 mt-1">Calls will appear here once your agent takes calls</p>
+              <p className="text-xs text-gray-300 mt-1">
+                Calls will appear here once your agent takes calls
+              </p>
             </div>
           )}
         </div>
