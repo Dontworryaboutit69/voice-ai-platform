@@ -1,14 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase/client';
 
-// Hardcoded API key as fallback (Next.js env vars don't always work in server routes)
-const ANTHROPIC_API_KEY = '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';
-
-// Create Anthropic client
 function getAnthropic(): Anthropic {
-  return new Anthropic({
-    apiKey: ANTHROPIC_API_KEY
-  });
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+  }
+  return new Anthropic({ apiKey });
 }
 
 interface SuggestionData {
@@ -116,51 +114,6 @@ export async function generateImprovementSuggestion(
     console.log(`[Improvement Suggestion] Created suggestion: ${suggestion.title}`);
   } catch (error: any) {
     console.error('[Improvement Suggestion] Claude API error:', error);
-
-    // TEMPORARY: Fallback to mock suggestion for testing
-    if (error.message?.includes('model:') || error.message?.includes('not_found')) {
-      console.log('[Improvement Suggestion] Using mock suggestion (API key issue)');
-
-      const mockSuggestion = {
-        title: `Fix: ${analysisData.pattern.pattern}`,
-        description: `Pattern detected in ${sourceCallIds.length} calls - agent is asking multiple questions in one turn instead of one at a time`,
-        changes: [
-          {
-            section: 'call_flow',
-            modification: 'Add instruction: "Ask only ONE question at a time, then STOP and wait for response. Never ask multiple questions in the same turn."'
-          }
-        ],
-        confidence: 0.85,
-        impact: 'high' as const
-      };
-
-      const { error: insertError } = await supabase
-        .from('ai_improvement_suggestions')
-        .insert({
-          agent_id: agentId,
-          source_type: sourceCallIds.length > 1 ? 'pattern_analysis' : 'batch_evaluation',
-          source_call_ids: sourceCallIds,
-          suggestion_type: 'prompt_change',
-          title: mockSuggestion.title,
-          description: mockSuggestion.description,
-          proposed_changes: {
-            sections: mockSuggestion.changes.map(c => c.section),
-            changes: mockSuggestion.changes
-          },
-          confidence_score: mockSuggestion.confidence,
-          impact_estimate: mockSuggestion.impact,
-          status: 'pending'
-        });
-
-      if (insertError) {
-        console.error('[Improvement Suggestion] Failed to store mock suggestion:', insertError);
-      } else {
-        console.log(`[Improvement Suggestion] Created mock suggestion: ${mockSuggestion.title}`);
-      }
-
-      return;
-    }
-
     throw error;
   }
 }

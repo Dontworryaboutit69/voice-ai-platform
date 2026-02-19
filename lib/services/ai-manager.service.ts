@@ -1,27 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase/client';
 
-// Hardcoded API key as fallback (Next.js env vars don't always work in server routes)
-const ANTHROPIC_API_KEY = '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';
-
-// Lazy initialization to ensure env vars are loaded
 let anthropic: Anthropic | null = null;
 
 function getAnthropic(): Anthropic {
   if (!anthropic) {
-    // Use hardcoded key as fallback
-    const apiKey = process.env.ANTHROPIC_API_KEY || ANTHROPIC_API_KEY;
-
-    console.log('[AI Manager] API Key value:', apiKey ? `${apiKey.substring(0, 10)}...` : 'undefined');
-    console.log('[AI Manager] API Key length:', apiKey?.length);
-
-    if (!apiKey || apiKey.trim() === '') {
-      console.error('[AI Manager] ANTHROPIC_API_KEY not found or empty');
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY environment variable is not set');
     }
-
-    console.log('[AI Manager] Initializing Anthropic client with API key');
-    anthropic = new Anthropic({ apiKey: apiKey.trim() });
+    anthropic = new Anthropic({ apiKey });
   }
   return anthropic;
 }
@@ -177,7 +165,7 @@ export async function evaluateCall(callId: string): Promise<Evaluation | null> {
         issues_detected: evaluation.issues_detected,
         opportunities: evaluation.opportunities,
         summary_analysis: evaluation.summary_analysis,
-        analysis_model: 'claude-3-5-sonnet-20241022',
+        analysis_model: 'claude-sonnet-4-5-20250929',
       });
 
     if (insertError) {
@@ -189,60 +177,6 @@ export async function evaluateCall(callId: string): Promise<Evaluation | null> {
     return evaluation;
   } catch (error: any) {
     console.error('[AI Manager] Claude API error:', error);
-
-    // TEMPORARY: Fallback to mock evaluation for testing
-    if (error.message?.includes('model:') || error.message?.includes('not_found')) {
-      console.log('[AI Manager] Using mock evaluation (API key issue)');
-
-      evaluation = {
-        quality_score: 0.75,
-        empathy_score: 0.65,
-        professionalism_score: 0.85,
-        efficiency_score: 0.70,
-        goal_achievement_score: 0.80,
-        issues_detected: [
-          {
-            type: 'agent_asks_multiple_questions',
-            severity: 'medium',
-            turn: 5,
-            example: 'Agent asked 3 questions in one turn'
-          }
-        ],
-        opportunities: [
-          {
-            type: 'upsell_missed',
-            description: 'Customer mentioned additional service but agent did not offer'
-          }
-        ],
-        summary_analysis: 'Mock evaluation - API key needs updating. Call was reasonably good but had some issues with question pacing.'
-      };
-
-      // Store mock evaluation
-      const { error: insertError } = await supabase
-        .from('ai_call_evaluations')
-        .insert({
-          call_id: callId,
-          agent_id: call.agent_id,
-          quality_score: evaluation.quality_score,
-          empathy_score: evaluation.empathy_score,
-          professionalism_score: evaluation.professionalism_score,
-          efficiency_score: evaluation.efficiency_score,
-          goal_achievement_score: evaluation.goal_achievement_score,
-          issues_detected: evaluation.issues_detected,
-          opportunities: evaluation.opportunities,
-          summary_analysis: evaluation.summary_analysis,
-          analysis_model: 'mock-for-testing',
-        });
-
-      if (insertError) {
-        console.error('[AI Manager] Failed to store mock evaluation:', insertError);
-      } else {
-        console.log(`[AI Manager] Stored mock evaluation for call ${callId}`);
-      }
-
-      return evaluation;
-    }
-
     throw error;
   }
 }
@@ -251,7 +185,7 @@ export async function evaluateCall(callId: string): Promise<Evaluation | null> {
  * Builds the evaluation prompt for Claude API
  */
 function buildEvaluationPrompt(transcript: string, currentPrompt: string): string {
-  return `You are an expert AI manager evaluating a voice AI agent's call performance.
+  return `You are an expert AI sales call evaluator. You evaluate voice AI agent calls against a specific quality framework.
 
 Agent's Current Prompt:
 ${currentPrompt || '[No prompt configured]'}
@@ -259,31 +193,68 @@ ${currentPrompt || '[No prompt configured]'}
 Call Transcript:
 ${transcript}
 
-Evaluate on these dimensions (score 0.0 to 1.0):
-1. Quality: Overall call quality, natural flow, coherence
-2. Empathy: Appropriate emotional responses, active listening
-3. Professionalism: Tone, language, courtesy
-4. Efficiency: Concise, on-topic, goal-oriented
-5. Goal Achievement: Did agent accomplish call objective?
+EVALUATION FRAMEWORK — Score each dimension 0.0 to 1.0:
 
-Detect issues (provide specific examples with turn numbers):
-- Multiple questions in one turn
-- Lack of empathy when customer expresses concern
-- Off-topic tangents
-- Unclear responses
-- Missing information collection
-- Agent interrupting customer
-- Over-explaining or being too verbose
-- Frustrating customer (signs of anger, impatience)
-- Early hang-ups (customer disconnecting during intro)
-- Non-English language detected (e.g., Spanish, French, etc.) - if customer speaks in a non-English language, mark as "language_not_supported" with the detected language in the example field
+1. **Quality** — Conversational naturalness and flow:
+   - One question per turn (never stacking multiple questions)
+   - Brief responses (1-2 sentences max, stops after question marks)
+   - Natural language (contractions, filler words like "Oh nice!", "Yeah, for sure", "Gotcha")
+   - Varied acknowledgments (not repeating "Perfect" or "Great" every turn)
+   - Conversational pacing (brief acknowledgment before question transitions)
 
-Identify opportunities:
-- Upsell opportunities missed
-- Qualification questions not asked
-- Follow-up not offered
+2. **Empathy** — Emotional intelligence without overdoing it:
+   - ONE empathetic statement max per conversation, naturally placed
+   - No dramatic empathy ("Oh I'm SO sorry to hear that!")
+   - Context-aware reactions specific to what the caller said
+   - Silence handling (not filling every pause when caller is thinking)
 
-Return ONLY valid JSON with this exact structure:
+3. **Professionalism** — Tone, personality depth, and character:
+   - Sounds like a real person with a distinct personality, not a template
+   - Industry-appropriate reactions and energy
+   - Never says "How may I assist you today?" or corporate filler
+   - Uses caller's name max 2 times total
+   - Doesn't reference "looking up" things AI can't access
+
+4. **Efficiency** — Sales process execution:
+   - Qualifies BEFORE collecting contact info (sales agent, not receptionist)
+   - Value bridge between qualification and contact collection (echoes what caller said, explains why they're a fit)
+   - Scheduling persistence: asks ONCE, if declined pivots to low-commitment alternative, never re-asks
+   - On pushback: rephrases differently, never repeats verbatim
+   - Prose recaps (never bullet points or lists in spoken dialogue)
+   - Phone numbers read back in 3-3-4 groups, emails accepted without spelling back
+
+5. **Goal Achievement** — Did the agent accomplish the call objective?
+   - Completed qualification questions with smart branching
+   - Collected contact info (if caller was qualified)
+   - Attempted booking/scheduling (if appropriate)
+   - Proper closing ("Is there anything else?" + goodbye)
+   - Handled edge cases gracefully (AI disclosure, off-topic, just browsing)
+
+ISSUE TYPES TO DETECT (provide specific examples with turn numbers):
+- "multiple_questions_in_turn" — Asked 2+ questions in one response (high severity if 3+)
+- "no_empathy" — Failed to acknowledge concern/urgency when appropriate
+- "excessive_empathy" — Multiple empathetic statements or dramatic reactions
+- "verbose_response" — Response over 2 sentences, or added filler after a question
+- "no_value_bridge" — Jumped to contact collection without summarizing fit
+- "contact_before_qualify" — Asked for name/phone/email before qualifying
+- "verbatim_re_ask" — Repeated same question word-for-word on pushback instead of rephrasing
+- "scheduling_pressure" — Asked to schedule more than once after being declined
+- "name_overuse" — Used caller's name more than 2 times
+- "robotic_language" — Used corporate/template language instead of natural speech
+- "missing_acknowledgment" — Jumped to next question without acknowledging caller's answer
+- "off_topic" — Tangent unrelated to the call objective
+- "missing_info_collection" — Failed to collect required information
+- "language_not_supported" — Customer spoke non-English; note the detected language in the example field
+- "interrogation_feel" — Rapid-fire questions without conversational pacing
+- "no_closing" — Call ended without proper recap and goodbye
+
+OPPORTUNITIES TO IDENTIFY:
+- "upsell_missed" — Caller mentioned interest in additional service
+- "qualification_gap" — Key qualifying question not asked
+- "followup_not_offered" — No next step offered when booking wasn't possible
+- "narrative_disconnect" — Agent collected info but didn't connect the dots (no story-building from caller's answers)
+
+Return ONLY valid JSON:
 {
   "quality_score": 0.85,
   "empathy_score": 0.60,
@@ -292,20 +263,26 @@ Return ONLY valid JSON with this exact structure:
   "goal_achievement_score": 0.80,
   "issues_detected": [
     {
-      "type": "no_empathy",
+      "type": "no_value_bridge",
       "severity": "high",
-      "turn": 3,
-      "example": "Customer said roof is leaking, agent didn't acknowledge concern"
+      "turn": 8,
+      "example": "Agent asked for phone number immediately after qualification without summarizing why caller is a good fit"
     }
   ],
   "opportunities": [
     {
       "type": "upsell_missed",
-      "description": "Customer mentioned interest in gutters but wasn't offered service"
+      "description": "Caller mentioned interest in gutters but wasn't offered service"
     }
   ],
-  "summary_analysis": "Overall strong call. Agent was professional and efficient but lacked empathy when customer mentioned emergency."
-}`;
+  "summary_analysis": "Agent qualified well but jumped to contact collection without a value bridge. Natural tone was strong but used caller's name 4 times."
+}
+
+SCORING GUIDANCE:
+- 0.9-1.0: Exceptional — follows framework perfectly
+- 0.7-0.89: Good — minor issues, mostly follows framework
+- 0.5-0.69: Needs work — noticeable framework violations
+- Below 0.5: Poor — significant issues impacting call quality`;
 }
 
 /**

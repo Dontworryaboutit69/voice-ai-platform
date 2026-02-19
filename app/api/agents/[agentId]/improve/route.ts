@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase/client';
 
-// API key - hardcoded temporarily to fix Turbopack env var issue
-const ANTHROPIC_API_KEY = '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';
 
 /**
  * Parses a compiled prompt into individual sections
@@ -115,7 +113,7 @@ export async function POST(
     // Use Claude to analyze feedback and improve prompt
     console.log('Processing feedback with Claude...');
     const anthropic = new Anthropic({
-      apiKey: ANTHROPIC_API_KEY,
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const improvementPrompt = `You are improving a voice AI prompt based on user feedback.
