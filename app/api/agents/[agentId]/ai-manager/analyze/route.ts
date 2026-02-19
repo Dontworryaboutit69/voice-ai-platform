@@ -72,6 +72,7 @@ export async function POST(
     let skippedCount = 0;
     let evalErrors = 0;
     let timedOut = false;
+    let apiBillingError = false;
 
     for (const call of unevaluatedCalls) {
       // Check if we're running low on time
@@ -89,21 +90,50 @@ export async function POST(
         } else {
           evaluatedCount++;
         }
-      } catch (error) {
+      } catch (error: any) {
         evalErrors++;
         console.error(`[ai-manager/analyze] Failed to evaluate call ${call.id}:`, error);
-        // Continue with other calls
+
+        // If it's a billing/auth error, stop immediately — no point retrying
+        const errorMsg = error?.message || error?.toString() || '';
+        if (errorMsg.includes('credit balance') || errorMsg.includes('401') || errorMsg.includes('authentication')) {
+          apiBillingError = true;
+          console.error('[ai-manager/analyze] API billing/auth error detected — stopping all evaluations');
+          break;
+        }
       }
     }
 
     console.log(`[ai-manager/analyze] Evaluated ${evaluatedCount} calls, skipped ${skippedCount}, errors ${evalErrors}`);
 
+    // If billing error, return a clear message immediately
+    if (apiBillingError) {
+      return NextResponse.json({
+        success: false,
+        error: 'Anthropic API credits exhausted. Please add credits to your Anthropic account, then try again.',
+        evaluated: evaluatedCount,
+        errors: evalErrors,
+        totalCalls: calls?.length || 0,
+      }, { status: 402 });
+    }
+
     // Step 2: Run pattern analysis across all evaluations (only if we have time)
     let patternsRan = false;
+    let patternError: string | null = null;
     if (Date.now() - startTime < MAX_RUNTIME_MS) {
       console.log(`[ai-manager/analyze] Running pattern analysis for agent ${agentId} (last ${daysSince} days)`);
-      await analyzePatterns(agentId, daysSince);
-      patternsRan = true;
+      try {
+        await analyzePatterns(agentId, daysSince);
+        patternsRan = true;
+      } catch (error: any) {
+        const errorMsg = error?.message || error?.toString() || '';
+        console.error('[ai-manager/analyze] Pattern analysis failed:', errorMsg);
+        if (errorMsg.includes('credit balance')) {
+          patternError = 'Anthropic API credits exhausted during suggestion generation.';
+        } else {
+          patternError = `Pattern analysis failed: ${errorMsg.substring(0, 200)}`;
+        }
+      }
     }
 
     return NextResponse.json({
@@ -117,12 +147,23 @@ export async function POST(
       totalCalls: calls?.length || 0,
       previouslyEvaluated: evaluatedCallIds.size,
       patternsAnalyzed: patternsRan,
+      patternError,
       timedOut,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[ai-manager/analyze POST] Error:', error);
+    const errorMsg = error?.message || error?.toString() || 'Unknown error';
+
+    // Provide specific error messages for known issues
+    if (errorMsg.includes('credit balance')) {
+      return NextResponse.json(
+        { error: 'Anthropic API credits exhausted. Please add credits to your Anthropic account.' },
+        { status: 402 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Failed to analyze patterns' },
+      { error: `Analysis failed: ${errorMsg.substring(0, 300)}` },
       { status: 500 }
     );
   }

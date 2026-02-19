@@ -167,13 +167,17 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       const data = await res.json();
 
       if (data.success) {
-        setStatusMessage('✅ Analysis complete! New suggestions generated.');
+        const parts = [`Evaluated ${data.evaluated || 0} calls`];
+        if (data.skipped) parts.push(`skipped ${data.skipped} non-interactive`);
+        if (data.patternError) parts.push(`Note: ${data.patternError}`);
+
+        setStatusMessage(`✅ Analysis complete! ${parts.join(', ')}.`);
         await loadData();
-        setTimeout(() => setStatusMessage(null), 3000);
-      } else {
-        setStatusMessage(`❌ Analysis failed: ${data.error || 'Unknown error'}`);
-        console.error('Analysis failed:', data.error);
         setTimeout(() => setStatusMessage(null), 5000);
+      } else {
+        setStatusMessage(`❌ ${data.error || 'Analysis failed. Check server logs.'}`);
+        console.error('Analysis failed:', data.error);
+        setTimeout(() => setStatusMessage(null), 8000);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

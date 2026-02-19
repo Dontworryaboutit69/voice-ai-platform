@@ -367,8 +367,18 @@ export async function analyzePatterns(
 
       if (!alreadyAddressed) {
         // Import and call improvement suggestion service
-        const { generateImprovementSuggestion } = await import('./improvement-suggestion.service');
-        await generateImprovementSuggestion(agentId, pattern.example_call_ids, { pattern });
+        try {
+          const { generateImprovementSuggestion } = await import('./improvement-suggestion.service');
+          await generateImprovementSuggestion(agentId, pattern.example_call_ids, { pattern });
+        } catch (suggestionError: any) {
+          const errorMsg = suggestionError?.message || '';
+          console.error(`[AI Manager] Failed to generate suggestion for pattern "${pattern.pattern}":`, errorMsg);
+          // Re-throw billing errors so the caller can handle them
+          if (errorMsg.includes('credit balance') || errorMsg.includes('401')) {
+            throw suggestionError;
+          }
+          // Continue with other patterns for non-billing errors
+        }
       } else {
         const existingStatus = existingSuggestions?.find(s =>
           s.title.toLowerCase().includes(pattern.pattern.toLowerCase()) ||
