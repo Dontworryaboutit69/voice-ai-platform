@@ -431,8 +431,9 @@ function buildBatchAnalysisPrompt(
 CURRENT AGENT PROMPT:
 ${promptText || '[No prompt configured]'}
 
-RECENTLY ACCEPTED IMPROVEMENTS (avoid duplicating these):
+RECENTLY ACCEPTED IMPROVEMENTS:
 ${recentFixesText}
+NOTE: If you see an issue in the calls that was ALREADY addressed by a recent accepted improvement, that means the previous fix was too weak — the agent is still doing it wrong. In this case, DO flag the issue again, but your fix_guidance MUST describe a STRONGER structural fix. Do NOT repeat the same "add mandatory language" approach. Instead, describe how to restructure the section so the LLM cannot take a shortcut around the correct behavior.
 
 CALL TRANSCRIPTS:
 ${transcriptsText}
@@ -478,7 +479,7 @@ RULES:
 - strengths: 1-4 things the agent does well. Be specific.
 - top_issues: Rank by impact. Maximum 3 issues. Each MUST include:
   - target_section: one of "role", "personality", "call_flow", "info_recap", "functions", "knowledge_base"
-  - fix_guidance: specific, actionable description of what the section rewrite should accomplish
+  - fix_guidance: specific, STRUCTURAL description of how to fix the issue. Do NOT say "add stronger language" or "emphasize that X is mandatory" — those are weak fixes. Instead, describe HOW to restructure the section so the correct behavior is the only possible path. Example: "Move the recap dialogue to be the ONLY path before end_call — remove any shortcut that lets the agent skip from booking confirmation directly to goodbye"
   - evidence: 2-3 specific examples from the transcripts with turn references
 - Do NOT flag issues that were already fixed in recent accepted improvements
 - If the agent is performing well (score > 0.85), it's OK to have 0 issues
@@ -520,15 +521,17 @@ ${otherSectionsContext || 'None'}
 
 REWRITE RULES:
 1. Output the COMPLETE rewritten section — not just the changes
-2. INTEGRATE the fix naturally into the existing content
-3. REMOVE any redundant or contradictory instructions (e.g., if there are 3 lines saying "ask one question at a time", keep only 1 well-placed instruction)
-4. PRESERVE all existing SSML tags, formatting, and structural elements
-5. Keep the section approximately the same length (within 20%)
-6. Do NOT add meta-instructions like "IMPORTANT:", "CRITICAL:", "NOTE:" — write natural prompt instructions
+2. Your job is to ACTUALLY FIX the issue so the agent behaves differently on the next call. Do NOT just add a line saying "this is mandatory" or "you must do X" — those are weak fixes that the LLM will ignore. Instead, RESTRUCTURE the section so the correct behavior is the only possible path. For example:
+   - WEAK FIX: Adding "The recap is mandatory and cannot be skipped" (agent will still skip it)
+   - STRONG FIX: Restructuring the flow so the recap IS the closing — making it impossible to reach end_call without going through the recap first. Put the recap dialogue DIRECTLY before the goodbye, with no shortcut path.
+3. Think about WHY the agent is ignoring the current instructions. Usually it's because there's an easier/shorter path the LLM takes. Your fix should ELIMINATE the shortcut, not just add a warning label on it.
+4. REMOVE any redundant or contradictory instructions (e.g., if there are 3 lines saying "ask one question at a time", keep only 1 well-placed instruction)
+5. PRESERVE all existing SSML tags and formatting
+6. Do NOT add meta-instructions like "IMPORTANT:", "CRITICAL:", "NOTE:" — write the actual dialogue and flow
 7. Maintain the tone and style of the original section
-8. If the section has clear sub-sections or numbered steps, maintain that structure
-9. CRITICAL — THIS IS A VOICE AI PROMPT. Everything you write will be spoken aloud by a text-to-speech engine. NEVER include literal system tokens, technical commands, or placeholders like "NO_RESPONSE_NEEDED", "WAIT", "SILENCE", "[pause]", etc. Instead, describe the BEHAVIOR in natural language (e.g., "If the caller is still speaking, wait silently until they finish before responding.")
-10. MINIMAL CHANGES ONLY — Your job is to fix the specific issue described above, NOT to rewrite the whole section. Lines that are unrelated to the issue MUST be kept EXACTLY as they are — same wording, same punctuation, same order. Do NOT rephrase, reword, or "improve" lines that aren't broken. If a line says "Never re-ask for information already provided", do NOT change it to "Never re-ask for information the caller already provided" — leave it alone. The diff should show ONLY the lines that address the issue.
+8. CRITICAL — THIS IS A VOICE AI PROMPT. Everything you write will be spoken aloud by a text-to-speech engine. NEVER include literal system tokens, technical commands, or placeholders like "NO_RESPONSE_NEEDED", "WAIT", "SILENCE", "[pause]", etc. Instead, describe the BEHAVIOR in natural language (e.g., "If the caller is still speaking, wait silently until they finish before responding.")
+9. Do NOT include instructions about audio-level behaviors controlled by Retell platform settings (interruption handling, response timing, audio overlap, turn-detection). Those are configured in Retell's speech settings, not the prompt.
+10. Lines that are UNRELATED to the issue must be kept EXACTLY as they are — same wording, same punctuation. Do NOT rephrase or "improve" lines that aren't broken. But lines that ARE related to the issue should be restructured as aggressively as needed to actually fix the problem.
 
 Return ONLY the rewritten section content. Do NOT include any JSON, markdown code blocks, or explanatory text. Just the raw section content that will replace the current content.`;
 }
