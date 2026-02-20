@@ -86,6 +86,33 @@ export async function POST(
 
     const supabase = createServiceClient();
 
+    // Handle reject_all before individual suggestion lookup
+    if (action === 'reject_all') {
+      const { data: rejected, error: updateError } = await supabase
+        .from('ai_improvement_suggestions')
+        .update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('agent_id', agentId)
+        .eq('status', 'pending')
+        .select('id');
+
+      if (updateError) {
+        console.error('[ai-manager/suggestions POST] Bulk reject error:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to reject suggestions' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Rejected ${rejected?.length || 0} pending suggestions`,
+        count: rejected?.length || 0,
+      });
+    }
+
     // Verify suggestion belongs to this agent
     const { data: suggestion, error: suggestionError } = await supabase
       .from('ai_improvement_suggestions')
@@ -158,31 +185,6 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: 'Suggestion rejected',
-      });
-    } else if (action === 'reject_all') {
-      // Bulk reject all pending suggestions for this agent
-      const { data: rejected, error: updateError } = await supabase
-        .from('ai_improvement_suggestions')
-        .update({
-          status: 'rejected',
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('agent_id', agentId)
-        .eq('status', 'pending')
-        .select('id');
-
-      if (updateError) {
-        console.error('[ai-manager/suggestions POST] Bulk reject error:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to reject suggestions' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `Rejected ${rejected?.length || 0} pending suggestions`,
-        count: rejected?.length || 0,
       });
     } else {
       return NextResponse.json(
