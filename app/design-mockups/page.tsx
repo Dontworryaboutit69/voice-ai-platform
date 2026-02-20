@@ -3,14 +3,12 @@
 import { useState } from "react";
 
 // ============================================================
-// DATA — matches real GHL pipeline + sidebar from screenshot
+// DATA
 // ============================================================
 const stages = [
   { name: "Youtube Leads", count: 0, value: "$0.00", cards: [] },
   {
-    name: "Web Form",
-    count: 6,
-    value: "$0.00",
+    name: "Web Form", count: 6, value: "$0.00",
     cards: [
       { name: "Daniel Woods", source: "Youtube Ads", value: "$0.00", calls: 3, texts: 4, daysAgo: 2 },
       { name: "Talbert Williams", source: "Youtube Ads", value: "$0.00", calls: 3, texts: 2, daysAgo: 5 },
@@ -20,9 +18,7 @@ const stages = [
   },
   { name: "Loveable Landing Page", count: 0, value: "$0.00", cards: [] },
   {
-    name: "Voice AI Nurture",
-    count: 22,
-    value: "$0.00",
+    name: "Voice AI Nurture", count: 22, value: "$0.00",
     cards: [
       { name: "Anita Wang", source: "Facebook", value: "$0.00", calls: 5, texts: 1, daysAgo: 1 },
       { name: "Hector Diaz", source: "Facebook", value: "$0.00", calls: 5, texts: 3, daysAgo: 3 },
@@ -31,9 +27,7 @@ const stages = [
     ],
   },
   {
-    name: "Not a working number",
-    count: 7,
-    value: "$0.00",
+    name: "Not a working number", count: 7, value: "$0.00",
     cards: [
       { name: "James Stogner", source: "Facebook", value: "$0.00", calls: 3, texts: 1, daysAgo: 2 },
       { name: "Joshua Inglis", source: "Facebook", value: "$0.00", calls: 6, texts: 18, daysAgo: 8 },
@@ -42,7 +36,6 @@ const stages = [
   },
 ];
 
-// Sidebar items matching GHL screenshot exactly
 const sidebarTop = [
   { label: "Launchpad", icon: "launchpad" },
   { label: "Dashboard", icon: "dashboard" },
@@ -65,7 +58,6 @@ const sidebarBottom = [
   { label: "Settings", icon: "settings" },
 ];
 
-// SVG icon paths (minimal, clean)
 function SidebarIcon({ icon, color }: { icon: string; color: string }) {
   const s = { width: 18, height: 18, fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (icon) {
@@ -89,7 +81,6 @@ function SidebarIcon({ icon, color }: { icon: string; color: string }) {
   }
 }
 
-// Avatar color generator
 function getAvatarColor(name: string) {
   const colors = [
     ["#6366f1", "#818cf8"], ["#8b5cf6", "#a78bfa"], ["#ec4899", "#f472b6"],
@@ -101,411 +92,233 @@ function getAvatarColor(name: string) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-// ============================================================
-// THEME 1: "Obsidian" — Ultra-dark with cyan/teal accents
-// Inspired by Linear, Raycast. Crisp, techy, developer-friendly.
-// ============================================================
-function Theme1() {
-  const accent = "#06b6d4";
-  const accentBg = "rgba(6,182,212,0.08)";
-  const accentBgHover = "rgba(6,182,212,0.12)";
-  const bg = "#0a0a0f";
-  const surface = "#111118";
-  const surfaceHover = "#16161f";
-  const border = "rgba(255,255,255,0.06)";
-  const textPrimary = "#f0f0f5";
-  const textSecondary = "rgba(255,255,255,0.45)";
-  const textMuted = "rgba(255,255,255,0.28)";
-
+// Helper to render a sidebar
+function Sidebar({ bg, border, brandGrad, brandShadow, searchBg, searchBorder, textSec, textMut, activeColor, activeBg, activeShadow, activeTextColor }: {
+  bg: string; border: string; brandGrad: string; brandShadow: string; searchBg: string; searchBorder: string;
+  textSec: string; textMut: string; activeColor: string; activeBg: string; activeShadow: string; activeTextColor: string;
+}) {
   return (
-    <div style={{ display: "flex", height: 780, background: bg, fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-      {/* Sidebar */}
-      <div style={{ width: 240, background: surface, borderRight: `1px solid ${border}`, display: "flex", flexDirection: "column", padding: "0" }}>
-        {/* Brand */}
-        <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "linear-gradient(135deg, #0e7490 0%, #06b6d4 100%)", borderRadius: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}>R</div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", letterSpacing: "-0.01em" }}>REV² Ai</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.7)" }}>Apopka, FL</div>
-            </div>
-          </div>
-          {/* Search */}
-          <div style={{ marginTop: 12, padding: "7px 10px", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: `1px solid ${border}`, display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="14" height="14" fill="none" stroke={textMuted} strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span style={{ fontSize: 12, color: textMuted }}>Search</span>
-            <span style={{ marginLeft: "auto", fontSize: 10, color: textMuted, background: "rgba(255,255,255,0.05)", padding: "1px 6px", borderRadius: 4 }}>⌘K</span>
+    <div style={{ width: 240, background: bg, borderRight: `1px solid ${border}`, display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: brandGrad, borderRadius: 12, boxShadow: brandShadow }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}>R</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>REV² Ai</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.75)" }}>Apopka, FL</div>
           </div>
         </div>
-
-        {/* Nav Top */}
-        <div style={{ padding: "8px 8px 0", flex: 1 }}>
-          {sidebarTop.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              fontWeight: item.active ? 500 : 400,
-              color: item.active ? accent : textSecondary,
-              background: item.active ? accentBg : "transparent",
-              cursor: "pointer", marginBottom: 1, transition: "all 0.15s",
-            }}>
-              <SidebarIcon icon={item.icon} color={item.active ? accent : "rgba(255,255,255,0.35)"} />
-              {item.label}
-              {item.active && <div style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: accent }} />}
-            </div>
-          ))}
-
-          <div style={{ height: 1, background: border, margin: "10px 12px" }} />
-
-          {sidebarBottom.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              fontWeight: 400, color: textSecondary, cursor: "pointer", marginBottom: 1,
-            }}>
-              <SidebarIcon icon={item.icon} color="rgba(255,255,255,0.35)" />
-              {item.label}
-            </div>
-          ))}
+        <div style={{ marginTop: 12, padding: "8px 10px", borderRadius: 8, background: searchBg, border: `1px solid ${searchBorder}`, display: "flex", alignItems: "center", gap: 8 }}>
+          <svg width="14" height="14" fill="none" stroke={textMut} strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span style={{ fontSize: 12, color: textMut }}>Search</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: textMut, background: "rgba(128,128,128,0.1)", padding: "2px 6px", borderRadius: 4 }}>⌘K</span>
         </div>
       </div>
+      <div style={{ padding: "8px 8px", flex: 1, overflowY: "auto" }}>
+        {sidebarTop.map((item, i) => (
+          <div key={i} style={{
+            padding: "9px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+            fontWeight: item.active ? 500 : 400,
+            color: item.active ? activeTextColor : textSec,
+            background: item.active ? activeBg : "transparent",
+            boxShadow: item.active ? activeShadow : "none",
+            cursor: "pointer", marginBottom: 2,
+          }}>
+            <SidebarIcon icon={item.icon} color={item.active ? activeColor : textMut} />
+            {item.label}
+          </div>
+        ))}
+        <div style={{ height: 1, background: border, margin: "8px 12px" }} />
+        {sidebarBottom.map((item, i) => (
+          <div key={i} style={{
+            padding: "9px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+            color: textSec, cursor: "pointer", marginBottom: 2,
+          }}>
+            <SidebarIcon icon={item.icon} color={textMut} />
+            {item.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      {/* Main */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: bg }}>
-        {/* Header */}
-        <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <h2 style={{ color: textPrimary, fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Opportunities</h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              <span style={{ padding: "4px 12px", borderRadius: 6, background: accentBg, color: accent, fontSize: 11, fontWeight: 500 }}>Filters</span>
-              <span style={{ padding: "4px 12px", borderRadius: 6, background: "rgba(255,255,255,0.04)", color: textSecondary, fontSize: 11 }}>Sort</span>
+// Helper to render pipeline board
+function Pipeline({ surface, border, accentBg, accentColor, accentColor2, textPri, textSec, textMut }: {
+  surface: string; border: string; accentBg: string; accentColor: string; accentColor2?: string;
+  textPri: string; textSec: string; textMut: string;
+}) {
+  return (
+    <div style={{ flex: 1, display: "flex", gap: 12, padding: "16px 14px", overflowX: "auto" }}>
+      {stages.map((stage, si) => (
+        <div key={si} style={{ minWidth: 270, flex: 1, display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "10px 14px", marginBottom: 10, borderRadius: 10, background: surface, border: `1px solid ${border}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: textPri }}>{stage.name}</span>
+              <span style={{ fontSize: 11, color: accentColor, background: accentBg, padding: "2px 8px", borderRadius: 5, fontWeight: 600 }}>{stage.count}</span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ padding: "6px 14px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: `1px solid ${border}`, color: textMuted, fontSize: 12 }}>Search...</div>
-            <div style={{ padding: "6px 14px", borderRadius: 6, background: accent, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Add</div>
-          </div>
-        </div>
-
-        {/* Pipeline */}
-        <div style={{ flex: 1, display: "flex", gap: 1, padding: "0", overflowX: "auto", background: "rgba(255,255,255,0.02)" }}>
-          {stages.map((stage, si) => (
-            <div key={si} style={{ minWidth: 270, flex: 1, display: "flex", flexDirection: "column", background: si % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)", padding: "16px 10px" }}>
-              {/* Stage Header */}
-              <div style={{ padding: "0 6px", marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: textPrimary, letterSpacing: "-0.01em" }}>{stage.name}</span>
-                  <span style={{ fontSize: 11, color: textMuted, background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 4, fontWeight: 500 }}>{stage.count}</span>
-                </div>
-                <div style={{ height: 2, borderRadius: 1, background: `linear-gradient(90deg, ${accent} 0%, transparent 100%)`, marginTop: 8, opacity: 0.5 }} />
-              </div>
-
-              {/* Cards */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-                {stage.cards.map((card, ci) => {
-                  const [c1, c2] = getAvatarColor(card.name);
-                  return (
-                    <div key={ci} style={{
-                      padding: "12px", borderRadius: 10, background: surface, border: `1px solid ${border}`,
-                      cursor: "pointer", transition: "all 0.15s",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg, ${c1}, ${c2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                          {card.name.charAt(0)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</div>
-                          <div style={{ fontSize: 10, color: textMuted }}>{card.daysAgo}d ago · {card.source}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <span style={{ padding: "2px 7px", borderRadius: 4, background: accentBg, color: accent, fontSize: 10, fontWeight: 500 }}>📞 {card.calls}</span>
-                        <span style={{ padding: "2px 7px", borderRadius: 4, background: accentBg, color: accent, fontSize: 10, fontWeight: 500 }}>💬 {card.texts}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 10, color: textMuted }}>{card.value}</span>
-                      </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+            {stage.cards.map((card, ci) => {
+              const [c1, c2] = getAvatarColor(card.name);
+              return (
+                <div key={ci} style={{
+                  padding: "14px", borderRadius: 12, background: surface, border: `1px solid ${border}`,
+                  cursor: "pointer", transition: "all 0.15s",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(135deg, ${c1}, ${c2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                      {card.name.charAt(0)}
                     </div>
-                  );
-                })}
-                {stage.cards.length === 0 && (
-                  <div style={{ padding: 32, borderRadius: 10, border: `1px dashed ${border}`, display: "flex", alignItems: "center", justifyContent: "center", color: textMuted, fontSize: 11 }}>
-                    Empty
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: textPri, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</div>
+                      <div style={{ fontSize: 10, color: textMut }}>{card.daysAgo}d ago · {card.source}</div>
+                    </div>
                   </div>
-                )}
+                  <div style={{ display: "flex", gap: 6, borderTop: `1px solid ${border}`, paddingTop: 10 }}>
+                    <span style={{ padding: "3px 8px", borderRadius: 5, background: accentBg, color: accentColor, fontSize: 10, fontWeight: 500 }}>📞 {card.calls}</span>
+                    <span style={{ padding: "3px 8px", borderRadius: 5, background: accentColor2 ? `${accentColor2}18` : accentBg, color: accentColor2 || accentColor, fontSize: 10, fontWeight: 500 }}>💬 {card.texts}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: textSec, fontWeight: 500 }}>{card.value}</span>
+                  </div>
+                </div>
+              );
+            })}
+            {stage.cards.length === 0 && (
+              <div style={{ padding: 32, borderRadius: 12, border: `1px dashed ${border}`, display: "flex", alignItems: "center", justifyContent: "center", color: textMut, fontSize: 11 }}>
+                No opportunities
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
+      ))}
+    </div>
+  );
+}
+
+// Helper for header
+function Header({ bg, border, accentBg, accentColor, accentGrad, textPri, textSec, textMut }: {
+  bg: string; border: string; accentBg: string; accentColor: string; accentGrad: string;
+  textPri: string; textSec: string; textMut: string;
+}) {
+  return (
+    <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}`, background: bg }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <h2 style={{ color: textPri, fontSize: 17, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Opportunities</h2>
+        <div style={{ display: "flex", gap: 6 }}>
+          <span style={{ padding: "5px 12px", borderRadius: 6, background: accentBg, color: accentColor, fontSize: 11, fontWeight: 500 }}>Filters</span>
+          <span style={{ padding: "5px 12px", borderRadius: 6, background: "rgba(128,128,128,0.08)", color: textSec, fontSize: 11 }}>Sort</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ padding: "6px 14px", borderRadius: 8, background: "rgba(128,128,128,0.06)", border: `1px solid ${border}`, color: textMut, fontSize: 12 }}>Search...</div>
+        <div style={{ padding: "6px 16px", borderRadius: 8, background: accentGrad, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Add</div>
       </div>
     </div>
   );
 }
 
 // ============================================================
-// THEME 2: "Ivory" — Light, airy, Apple-esque
-// Soft whites, refined grays, blue accent. Premium & clean.
+// 1. OBSIDIAN — Ultra-dark, cyan/teal (Round 1)
 // ============================================================
-function Theme2() {
-  const accent = "#3b82f6";
-  const accentLight = "#eff6ff";
-  const bg = "#f5f5f7";
-  const surface = "#ffffff";
-  const border = "#e8e8ed";
-  const borderLight = "#f0f0f5";
-  const textPrimary = "#1d1d1f";
-  const textSecondary = "#6e6e73";
-  const textMuted = "#aeaeb2";
-
+function ThemeObsidian() {
   return (
-    <div style={{ display: "flex", height: 780, background: bg, fontFamily: "'SF Pro Display', 'Inter', system-ui, -apple-system, sans-serif" }}>
-      {/* Sidebar */}
-      <div style={{ width: 240, background: surface, borderRight: `1px solid ${border}`, display: "flex", flexDirection: "column" }}>
-        {/* Brand */}
-        <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${borderLight}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: `linear-gradient(135deg, ${accent} 0%, #2563eb 100%)`, borderRadius: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}>R</div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>REV² Ai</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>Apopka, FL</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, padding: "8px 10px", borderRadius: 10, background: bg, display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="14" height="14" fill="none" stroke={textMuted} strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span style={{ fontSize: 12, color: textMuted }}>Search</span>
-            <span style={{ marginLeft: "auto", fontSize: 10, color: textMuted, background: surface, padding: "1px 6px", borderRadius: 4, border: `1px solid ${border}` }}>⌘K</span>
-          </div>
-        </div>
-
-        <div style={{ padding: "8px 8px 0", flex: 1 }}>
-          {sidebarTop.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 10, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              fontWeight: item.active ? 600 : 400,
-              color: item.active ? accent : textSecondary,
-              background: item.active ? accentLight : "transparent",
-              cursor: "pointer", marginBottom: 1,
-            }}>
-              <SidebarIcon icon={item.icon} color={item.active ? accent : textMuted} />
-              {item.label}
-            </div>
-          ))}
-          <div style={{ height: 1, background: borderLight, margin: "10px 12px" }} />
-          {sidebarBottom.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 10, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              color: textSecondary, cursor: "pointer", marginBottom: 1,
-            }}>
-              <SidebarIcon icon={item.icon} color={textMuted} />
-              {item.label}
-            </div>
-          ))}
-        </div>
+    <div style={{ display: "flex", height: 780, background: "#0a0a0f", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#111118" border="rgba(255,255,255,0.06)" brandGrad="linear-gradient(135deg, #0e7490, #06b6d4)" brandShadow="0 2px 8px rgba(6,182,212,0.25)" searchBg="rgba(255,255,255,0.03)" searchBorder="rgba(255,255,255,0.06)" textSec="rgba(255,255,255,0.45)" textMut="rgba(255,255,255,0.28)" activeColor="#06b6d4" activeBg="rgba(6,182,212,0.08)" activeShadow="none" activeTextColor="#06b6d4" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0a0a0f" }}>
+        <Header bg="#0a0a0f" border="rgba(255,255,255,0.06)" accentBg="rgba(6,182,212,0.08)" accentColor="#06b6d4" accentGrad="#06b6d4" textPri="#f0f0f5" textSec="rgba(255,255,255,0.45)" textMut="rgba(255,255,255,0.28)" />
+        <Pipeline surface="#111118" border="rgba(255,255,255,0.06)" accentBg="rgba(6,182,212,0.08)" accentColor="#06b6d4" textPri="#f0f0f5" textSec="rgba(255,255,255,0.45)" textMut="rgba(255,255,255,0.28)" />
       </div>
+    </div>
+  );
+}
 
-      {/* Main */}
+// ============================================================
+// 2. IVORY — Light, Apple-esque, blue accent (Round 1)
+// ============================================================
+function ThemeIvory() {
+  return (
+    <div style={{ display: "flex", height: 780, background: "#f5f5f7", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#ffffff" border="#e8e8ed" brandGrad="linear-gradient(135deg, #3b82f6, #2563eb)" brandShadow="0 2px 8px rgba(59,130,246,0.2)" searchBg="#f5f5f7" searchBorder="#e8e8ed" textSec="#6e6e73" textMut="#aeaeb2" activeColor="#3b82f6" activeBg="#eff6ff" activeShadow="none" activeTextColor="#3b82f6" />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", background: surface, borderBottom: `1px solid ${border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <h2 style={{ color: textPrimary, fontSize: 17, fontWeight: 700, margin: 0, letterSpacing: "-0.025em" }}>Opportunities</h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              <span style={{ padding: "4px 12px", borderRadius: 8, background: bg, border: `1px solid ${border}`, color: textSecondary, fontSize: 11, fontWeight: 500 }}>Filters</span>
-              <span style={{ padding: "4px 12px", borderRadius: 8, background: bg, border: `1px solid ${border}`, color: textSecondary, fontSize: 11 }}>Sort</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ padding: "6px 14px", borderRadius: 8, background: bg, border: `1px solid ${border}`, color: textMuted, fontSize: 12 }}>Search...</div>
-            <div style={{ padding: "6px 14px", borderRadius: 8, background: accent, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Add</div>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, display: "flex", gap: 14, padding: "18px 16px", overflowX: "auto" }}>
-          {stages.map((stage, si) => (
-            <div key={si} style={{ minWidth: 270, flex: 1, display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "10px 12px", marginBottom: 10, borderRadius: 12, background: surface, border: `1px solid ${border}` }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: textPrimary }}>{stage.name}</span>
-                  <span style={{ fontSize: 11, color: textMuted, background: bg, padding: "2px 8px", borderRadius: 6 }}>{stage.count}</span>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
-                {stage.cards.map((card, ci) => {
-                  const [c1, c2] = getAvatarColor(card.name);
-                  return (
-                    <div key={ci} style={{
-                      padding: "14px", borderRadius: 14, background: surface, border: `1px solid ${border}`,
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)", cursor: "pointer",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(135deg, ${c1}, ${c2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                          {card.name.charAt(0)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</div>
-                          <div style={{ fontSize: 10, color: textMuted }}>{card.daysAgo}d ago</div>
-                        </div>
-                        <span style={{ fontSize: 10, color: textMuted, background: bg, padding: "2px 8px", borderRadius: 6 }}>{card.source}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, borderTop: `1px solid ${borderLight}`, paddingTop: 10 }}>
-                        <span style={{ padding: "3px 8px", borderRadius: 6, background: accentLight, color: accent, fontSize: 10, fontWeight: 500 }}>📞 {card.calls}</span>
-                        <span style={{ padding: "3px 8px", borderRadius: 6, background: accentLight, color: accent, fontSize: 10, fontWeight: 500 }}>💬 {card.texts}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, color: textSecondary, fontWeight: 500 }}>{card.value}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {stage.cards.length === 0 && (
-                  <div style={{ padding: 32, borderRadius: 14, border: `2px dashed ${borderLight}`, display: "flex", alignItems: "center", justifyContent: "center", color: textMuted, fontSize: 11, background: surface }}>
-                    No opportunities
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <Header bg="#ffffff" border="#e8e8ed" accentBg="#eff6ff" accentColor="#3b82f6" accentGrad="#3b82f6" textPri="#1d1d1f" textSec="#6e6e73" textMut="#aeaeb2" />
+        <Pipeline surface="#ffffff" border="#e8e8ed" accentBg="#eff6ff" accentColor="#3b82f6" textPri="#1d1d1f" textSec="#6e6e73" textMut="#aeaeb2" />
       </div>
     </div>
   );
 }
 
 // ============================================================
-// THEME 3: "Nebula" — Dark with gradient purple/pink accents
-// Bold, vibrant. Inspired by Figma dark mode, Discord.
+// 3. NEBULA — Dark, purple/pink gradients (Round 1)
 // ============================================================
-function Theme3() {
-  const accent1 = "#8b5cf6";
-  const accent2 = "#ec4899";
-  const accentGrad = `linear-gradient(135deg, ${accent1} 0%, ${accent2} 100%)`;
-  const accentBg = "rgba(139,92,246,0.1)";
-  const bg = "#0f0f14";
-  const surface = "#17171e";
-  const surfaceRaised = "#1e1e28";
-  const border = "rgba(255,255,255,0.07)";
-  const textPrimary = "#eeeef0";
-  const textSecondary = "rgba(255,255,255,0.5)";
-  const textMuted = "rgba(255,255,255,0.25)";
-
+function ThemeNebula() {
   return (
-    <div style={{ display: "flex", height: 780, background: bg, fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-      {/* Sidebar */}
-      <div style={{ width: 240, background: surface, borderRight: `1px solid ${border}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: accentGrad, borderRadius: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}>R</div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>REV² Ai</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.7)" }}>Apopka, FL</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, padding: "7px 10px", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: `1px solid ${border}`, display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="14" height="14" fill="none" stroke={textMuted} strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span style={{ fontSize: 12, color: textMuted }}>Search</span>
-            <span style={{ marginLeft: "auto", fontSize: 10, color: textMuted, background: "rgba(255,255,255,0.05)", padding: "1px 6px", borderRadius: 4 }}>⌘K</span>
-          </div>
-        </div>
-
-        <div style={{ padding: "8px 8px 0", flex: 1 }}>
-          {sidebarTop.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              fontWeight: item.active ? 500 : 400,
-              color: item.active ? "#fff" : textSecondary,
-              background: item.active ? accentGrad : "transparent",
-              cursor: "pointer", marginBottom: 1,
-            }}>
-              <SidebarIcon icon={item.icon} color={item.active ? "#fff" : "rgba(255,255,255,0.35)"} />
-              {item.label}
-            </div>
-          ))}
-          <div style={{ height: 1, background: border, margin: "10px 12px" }} />
-          {sidebarBottom.map((item, i) => (
-            <div key={i} style={{
-              padding: "8px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-              color: textSecondary, cursor: "pointer", marginBottom: 1,
-            }}>
-              <SidebarIcon icon={item.icon} color="rgba(255,255,255,0.35)" />
-              {item.label}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main */}
+    <div style={{ display: "flex", height: 780, background: "#0f0f14", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#17171e" border="rgba(255,255,255,0.07)" brandGrad="linear-gradient(135deg, #8b5cf6, #ec4899)" brandShadow="0 2px 10px rgba(139,92,246,0.25)" searchBg="rgba(255,255,255,0.03)" searchBorder="rgba(255,255,255,0.07)" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.25)" activeColor="#fff" activeBg="linear-gradient(135deg, #8b5cf6, #ec4899)" activeShadow="0 2px 6px rgba(139,92,246,0.3)" activeTextColor="#fff" />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <h2 style={{ color: textPrimary, fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Opportunities</h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              <span style={{ padding: "4px 12px", borderRadius: 6, background: accentBg, color: accent1, fontSize: 11, fontWeight: 500 }}>Filters</span>
-              <span style={{ padding: "4px 12px", borderRadius: 6, background: "rgba(255,255,255,0.04)", color: textSecondary, fontSize: 11 }}>Sort</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ padding: "6px 14px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: `1px solid ${border}`, color: textMuted, fontSize: 12 }}>Search...</div>
-            <div style={{ padding: "6px 14px", borderRadius: 8, background: accentGrad, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>+ Add</div>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, display: "flex", gap: 12, padding: "16px 14px", overflowX: "auto" }}>
-          {stages.map((stage, si) => (
-            <div key={si} style={{ minWidth: 270, flex: 1, display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "10px 12px", marginBottom: 10, borderRadius: 10, background: surfaceRaised, border: `1px solid ${border}` }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: textPrimary }}>{stage.name}</span>
-                  <span style={{ fontSize: 10, color: accent1, background: accentBg, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{stage.count}</span>
-                </div>
-                <div style={{ height: 3, borderRadius: 2, background: accentGrad, marginTop: 8, opacity: 0.6 }} />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-                {stage.cards.map((card, ci) => {
-                  const [c1, c2] = getAvatarColor(card.name);
-                  return (
-                    <div key={ci} style={{
-                      padding: "12px", borderRadius: 12, background: surfaceRaised, border: `1px solid ${border}`,
-                      cursor: "pointer", transition: "all 0.15s",
-                      position: "relative", overflow: "hidden",
-                    }}>
-                      {/* Subtle gradient top edge */}
-                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: accentGrad, opacity: 0.4 }} />
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: "50%", background: `linear-gradient(135deg, ${c1}, ${c2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                          {card.name.charAt(0)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</div>
-                          <div style={{ fontSize: 10, color: textMuted }}>{card.source} · {card.daysAgo}d</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <span style={{ padding: "2px 7px", borderRadius: 4, background: accentBg, color: accent1, fontSize: 10, fontWeight: 500 }}>📞 {card.calls}</span>
-                        <span style={{ padding: "2px 7px", borderRadius: 4, background: "rgba(236,72,153,0.1)", color: accent2, fontSize: 10, fontWeight: 500 }}>💬 {card.texts}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 10, color: textMuted }}>{card.value}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {stage.cards.length === 0 && (
-                  <div style={{ padding: 32, borderRadius: 12, border: `1px dashed ${border}`, display: "flex", alignItems: "center", justifyContent: "center", color: textMuted, fontSize: 11 }}>
-                    Empty
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <Header bg="#0f0f14" border="rgba(255,255,255,0.07)" accentBg="rgba(139,92,246,0.1)" accentColor="#8b5cf6" accentGrad="linear-gradient(135deg, #8b5cf6, #ec4899)" textPri="#eeeef0" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.25)" />
+        <Pipeline surface="#1e1e28" border="rgba(255,255,255,0.07)" accentBg="rgba(139,92,246,0.1)" accentColor="#8b5cf6" accentColor2="#ec4899" textPri="#eeeef0" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.25)" />
       </div>
     </div>
   );
 }
 
 // ============================================================
-// MAIN PAGE — Theme Selector
+// 4. SLATE — Medium-dark warm gray + blue (Round 2)
+// ============================================================
+function ThemeSlate() {
+  return (
+    <div style={{ display: "flex", height: 780, background: "#1e2028", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#252830" border="rgba(255,255,255,0.08)" brandGrad="linear-gradient(135deg, #3b82f6, #2563eb)" brandShadow="0 2px 8px rgba(59,130,246,0.25)" searchBg="rgba(255,255,255,0.04)" searchBorder="rgba(255,255,255,0.08)" textSec="#9ca3af" textMut="#6b7280" activeColor="#fff" activeBg="#3b82f6" activeShadow="0 2px 6px rgba(59,130,246,0.2)" activeTextColor="#fff" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#1e2028" border="rgba(255,255,255,0.08)" accentBg="rgba(59,130,246,0.1)" accentColor="#3b82f6" accentGrad="#3b82f6" textPri="#e8eaed" textSec="#9ca3af" textMut="#6b7280" />
+        <Pipeline surface="#282b35" border="rgba(255,255,255,0.08)" accentBg="rgba(59,130,246,0.1)" accentColor="#3b82f6" textPri="#e8eaed" textSec="#9ca3af" textMut="#6b7280" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 5. PEARL — Warm white, cream, indigo (Round 2)
+// ============================================================
+function ThemePearl() {
+  return (
+    <div style={{ display: "flex", height: 780, background: "#faf9f7", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#ffffff" border="#e7e5e0" brandGrad="linear-gradient(135deg, #6366f1, #7c3aed)" brandShadow="0 2px 8px rgba(99,102,241,0.2)" searchBg="#f5f4f1" searchBorder="#e7e5e0" textSec="#57534e" textMut="#a8a29e" activeColor="#4f46e5" activeBg="#eef2ff" activeShadow="none" activeTextColor="#4f46e5" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#ffffff" border="#e7e5e0" accentBg="#eef2ff" accentColor="#4f46e5" accentGrad="#6366f1" textPri="#1c1917" textSec="#57534e" textMut="#a8a29e" />
+        <Pipeline surface="#ffffff" border="#e7e5e0" accentBg="#eef2ff" accentColor="#4f46e5" textPri="#1c1917" textSec="#57534e" textMut="#a8a29e" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 6. DUSK — Soft purple-tinted dark (Round 2)
+// ============================================================
+function ThemeDusk() {
+  return (
+    <div style={{ display: "flex", height: 780, background: "#1a1b2e", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#1f2037" border="rgba(255,255,255,0.08)" brandGrad="linear-gradient(135deg, #6366f1, #8b5cf6)" brandShadow="0 2px 10px rgba(99,102,241,0.25)" searchBg="rgba(255,255,255,0.04)" searchBorder="rgba(255,255,255,0.08)" textSec="#9d9db8" textMut="#6b6b88" activeColor="#fff" activeBg="linear-gradient(135deg, #6366f1, #8b5cf6)" activeShadow="0 2px 6px rgba(99,102,241,0.2)" activeTextColor="#fff" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#1a1b2e" border="rgba(255,255,255,0.08)" accentBg="rgba(129,140,248,0.1)" accentColor="#818cf8" accentGrad="linear-gradient(135deg, #6366f1, #8b5cf6)" textPri="#e8e8f0" textSec="#9d9db8" textMut="#6b6b88" />
+        <Pipeline surface="#242640" border="rgba(255,255,255,0.08)" accentBg="rgba(129,140,248,0.1)" accentColor="#818cf8" accentColor2="#a78bfa" textPri="#e8e8f0" textSec="#9d9db8" textMut="#6b6b88" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN PAGE — All 6 designs
 // ============================================================
 export default function DesignMockups() {
   const [selected, setSelected] = useState<number | null>(null);
 
   const themes = [
-    { name: "Obsidian", desc: "Ultra-dark with cyan/teal accents — Linear & Raycast inspired", component: <Theme1 /> },
-    { name: "Ivory", desc: "Light, airy, Apple-esque — soft whites with blue accents", component: <Theme2 /> },
-    { name: "Nebula", desc: "Dark with vibrant purple/pink gradients — bold & modern", component: <Theme3 /> },
+    { name: "Obsidian", desc: "Ultra-dark with cyan/teal accents — Linear/Raycast vibe", round: 1, component: <ThemeObsidian /> },
+    { name: "Ivory", desc: "Light, Apple-esque with blue accents — clean & airy", round: 1, component: <ThemeIvory /> },
+    { name: "Nebula", desc: "Dark with vibrant purple/pink gradients — bold & modern", round: 1, component: <ThemeNebula /> },
+    { name: "Slate", desc: "Medium-dark warm gray + blue — Notion/GitHub dark feel, not too dark", round: 2, component: <ThemeSlate /> },
+    { name: "Pearl", desc: "Warm white with cream tones & indigo — Stripe/Notion light feel", round: 2, component: <ThemePearl /> },
+    { name: "Dusk", desc: "Soft purple-tinted dark — your current GHL vibe but way cleaner", round: 2, component: <ThemeDusk /> },
   ];
 
   return (
@@ -516,12 +329,12 @@ export default function DesignMockups() {
           <h1 style={{ color: "#fafafa", fontSize: 36, fontWeight: 800, margin: 0, letterSpacing: "-0.04em" }}>
             GHL Design System
           </h1>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 16, marginTop: 10, maxWidth: 500, marginLeft: "auto", marginRight: "auto" }}>
-            Pick your favorite design direction. Round 2 will refine your choice with two variations.
+          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 16, marginTop: 10, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
+            All 6 design options. Pick your favorite and I&apos;ll create 2 final refined variations.
           </p>
         </div>
 
-        {/* Theme Cards */}
+        {/* Themes */}
         <div style={{ display: "flex", flexDirection: "column", gap: 72 }}>
           {themes.map((theme, i) => (
             <div key={i}>
@@ -533,7 +346,7 @@ export default function DesignMockups() {
                       background: selected === i ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.06)",
                       color: selected === i ? "#fff" : "rgba(255,255,255,0.4)",
                     }}>
-                      {selected === i ? "✓ Selected" : `${i + 1} of 3`}
+                      {selected === i ? "✓ Selected" : `Round ${theme.round}`}
                     </span>
                     <h2 style={{ color: "#fafafa", fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.025em" }}>{theme.name}</h2>
                   </div>
@@ -551,7 +364,6 @@ export default function DesignMockups() {
                   {selected === i ? "Selected ✓" : "Pick This One"}
                 </button>
               </div>
-
               <div style={{
                 borderRadius: 16, overflow: "hidden",
                 boxShadow: selected === i ? "0 0 0 2px #22c55e, 0 12px 40px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.4)",
@@ -567,7 +379,7 @@ export default function DesignMockups() {
         <div style={{ marginTop: 72, padding: 32, borderRadius: 16, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 14, margin: 0 }}>
             {selected !== null
-              ? `You picked "${themes[selected].name}" — tell me and I'll create 2 refined variations next.`
+              ? `You picked "${themes[selected].name}" — tell me and I'll create 2 final refined variations.`
               : "Pick a design above, then let me know your choice."}
           </p>
         </div>
