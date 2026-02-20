@@ -307,12 +307,54 @@ function ThemeDusk() {
 }
 
 // ============================================================
-// MAIN PAGE — All 6 designs
+// 7. NEBULA PRO — Deep blue to electric blue gradients
+// Same Nebula layout energy but strong, professional, masculine
+// ============================================================
+function NebulaProTheme() {
+  const accent1 = "#3b82f6";
+  const accent2 = "#06b6d4";
+  const accentGrad = "linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #06b6d4 100%)";
+  const accentGradSoft = "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)";
+  return (
+    <div style={{ display: "flex", height: 780, background: "#0f1219", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#151a24" border="rgba(255,255,255,0.07)" brandGrad={accentGrad} brandShadow="0 2px 12px rgba(59,130,246,0.3)" searchBg="rgba(255,255,255,0.03)" searchBorder="rgba(255,255,255,0.07)" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" activeColor="#fff" activeBg={accentGradSoft} activeShadow="0 2px 8px rgba(59,130,246,0.3)" activeTextColor="#fff" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#0f1219" border="rgba(255,255,255,0.07)" accentBg="rgba(59,130,246,0.1)" accentColor={accent1} accentGrad={accentGrad} textPri="#edf0f7" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" />
+        <Pipeline surface="#181d28" border="rgba(255,255,255,0.07)" accentBg="rgba(59,130,246,0.1)" accentColor={accent1} accentColor2={accent2} textPri="#edf0f7" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 8. NEBULA EDGE — Deep indigo to teal/emerald gradients
+// Rich, bold, premium. Strong without being aggressive.
+// ============================================================
+function NebulaEdgeTheme() {
+  const accent1 = "#6366f1";
+  const accent2 = "#10b981";
+  const accentGrad = "linear-gradient(135deg, #4338ca 0%, #6366f1 40%, #10b981 100%)";
+  const accentGradSoft = "linear-gradient(135deg, #4f46e5 0%, #10b981 100%)";
+  return (
+    <div style={{ display: "flex", height: 780, background: "#0d1117", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#131920" border="rgba(255,255,255,0.07)" brandGrad={accentGrad} brandShadow="0 2px 12px rgba(99,102,241,0.25)" searchBg="rgba(255,255,255,0.03)" searchBorder="rgba(255,255,255,0.07)" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" activeColor="#fff" activeBg={accentGradSoft} activeShadow="0 2px 8px rgba(99,102,241,0.25)" activeTextColor="#fff" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#0d1117" border="rgba(255,255,255,0.07)" accentBg="rgba(99,102,241,0.1)" accentColor={accent1} accentGrad={accentGrad} textPri="#e6edf3" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" />
+        <Pipeline surface="#161b22" border="rgba(255,255,255,0.07)" accentBg="rgba(99,102,241,0.1)" accentColor={accent1} accentColor2={accent2} textPri="#e6edf3" textSec="rgba(255,255,255,0.5)" textMut="rgba(255,255,255,0.28)" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN PAGE — All designs
 // ============================================================
 export default function DesignMockups() {
   const [selected, setSelected] = useState<number | null>(null);
 
   const themes = [
+    { name: "Nebula Pro", desc: "Deep blue to electric blue/cyan gradients — strong, professional, tech-forward", round: "Final", component: <NebulaProTheme /> },
+    { name: "Nebula Edge", desc: "Indigo to teal/emerald gradients — bold, premium, modern", round: "Final", component: <NebulaEdgeTheme /> },
     { name: "Obsidian", desc: "Ultra-dark with cyan/teal accents — Linear/Raycast vibe", round: 1, component: <ThemeObsidian /> },
     { name: "Ivory", desc: "Light, Apple-esque with blue accents — clean & airy", round: 1, component: <ThemeIvory /> },
     { name: "Nebula", desc: "Dark with vibrant purple/pink gradients — bold & modern", round: 1, component: <ThemeNebula /> },
@@ -330,7 +372,7 @@ export default function DesignMockups() {
             GHL Design System
           </h1>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 16, marginTop: 10, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
-            All 6 design options. Pick your favorite and I&apos;ll create 2 final refined variations.
+            2 new Nebula refinements at the top (stronger colors, same gradient energy) + all previous designs below. Pick the winner.
           </p>
         </div>
 
@@ -379,8 +421,8 @@ export default function DesignMockups() {
         <div style={{ marginTop: 72, padding: 32, borderRadius: 16, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 14, margin: 0 }}>
             {selected !== null
-              ? `You picked "${themes[selected].name}" — tell me and I'll create 2 final refined variations.`
-              : "Pick a design above, then let me know your choice."}
+              ? `You picked "${themes[selected].name}" — tell me and we'll go with this one!`
+              : "Pick your final design above and let me know."}
           </p>
         </div>
       </div>
