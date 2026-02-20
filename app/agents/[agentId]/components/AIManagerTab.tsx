@@ -34,9 +34,9 @@ interface Suggestion {
     sections: string[];
     changes: Array<{
       section: string;
-      modification?: string;    // Legacy
-      current_content?: string;  // V2
-      new_content?: string;      // V2
+      modification?: string;
+      current_content?: string;
+      new_content?: string;
     }>;
   };
   created_at: string;
@@ -51,7 +51,6 @@ function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
     <div className="font-mono text-sm overflow-x-auto rounded-lg border border-gray-300 bg-gray-50">
       {changes.map((change, idx) => {
         const lines = change.value.split('\n').filter((l, i, arr) =>
-          // Keep all lines except trailing empty
           i < arr.length - 1 || l.length > 0
         );
 
@@ -84,7 +83,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
-  const [expandedSuggestionId, setExpandedSuggestionId] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
   const [expandedIssueIdx, setExpandedIssueIdx] = useState<number | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -101,18 +100,17 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
     try {
       setLoading(true);
 
-      // Load batch analyses
-      const analysisRes = await fetch(`/api/agents/${agentId}/ai-manager/analyze`);
+      const [analysisRes, suggestionsRes] = await Promise.all([
+        fetch(`/api/agents/${agentId}/ai-manager/analyze`),
+        fetch(`/api/agents/${agentId}/ai-manager/suggestions`),
+      ]);
+
       const analysisData = await analysisRes.json();
+      const suggestionsData = await suggestionsRes.json();
+
       const analyses = analysisData.analyses || [];
       setLatestAnalysis(analyses.length > 0 ? analyses[0] : null);
-
-      // Load suggestions
-      const suggestionsRes = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`);
-      const suggestionsData = await suggestionsRes.json();
       setSuggestions(suggestionsData.suggestions || []);
-
-      // Reset issue selection
       setSelectedIssueIdxs(new Set());
     } catch (error) {
       console.error('Failed to load AI Manager data:', error);
@@ -163,7 +161,6 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
 
     const selectedIssues = Array.from(selectedIssueIdxs).map(idx => latestAnalysis.top_issues[idx]);
 
-    // Check if all selected are platform-level
     const fixable = selectedIssues.filter(i => i.target_section !== 'none');
     if (fixable.length === 0) {
       setStatusMessage('All selected issues are platform-level. Adjust Retell speech settings instead.');
@@ -192,8 +189,9 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         return;
       }
 
-      setStatusMessage(`Fix generated! Review the suggestion below.`);
+      setStatusMessage(`Fix generated! Review the changes below.`);
       setSelectedIssueIdxs(new Set());
+      setShowDiff(true);
       await loadData();
       setTimeout(() => setStatusMessage(null), 5000);
     } catch (error) {
@@ -220,8 +218,11 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
 
   function selectAllIssues() {
     if (!latestAnalysis) return;
-    const allIdxs = latestAnalysis.top_issues.map((_, idx) => idx);
-    setSelectedIssueIdxs(new Set(allIdxs));
+    const fixableIdxs = latestAnalysis.top_issues
+      .map((issue, idx) => ({ issue, idx }))
+      .filter(({ issue }) => issue.target_section !== 'none')
+      .map(({ idx }) => idx);
+    setSelectedIssueIdxs(new Set(fixableIdxs));
   }
 
   function deselectAllIssues() {
@@ -233,7 +234,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
 
     try {
       setProcessingId(suggestionId);
-      setStatusMessage('Applying suggestion and syncing to Retell...');
+      setStatusMessage('Applying fix and syncing to Retell...');
 
       const res = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`, {
         method: 'POST',
@@ -248,7 +249,8 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       const data = await res.json();
 
       if (data.success) {
-        setStatusMessage('Suggestion accepted! Prompt updated and synced to Retell.');
+        setStatusMessage('Fix applied! Prompt updated and synced to Retell.');
+        setShowDiff(false);
         await loadData();
         setTimeout(() => setStatusMessage(null), 4000);
       } else {
@@ -281,6 +283,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
 
       const data = await res.json();
       if (data.success) {
+        setShowDiff(false);
         await loadData();
       }
     } catch (error) {
@@ -292,24 +295,22 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
 
   // ─── Derived state ──────────────────────────────────────────────────────────
 
-  const pendingSuggestions = suggestions.filter(s => s.status === 'pending');
-  const acceptedCount = suggestions.filter(s => s.status === 'accepted').length;
+  const acceptedSuggestions = suggestions.filter(s => s.status === 'accepted');
 
-  // Check if any selected issues are fixable (not platform-level)
   const fixableSelectedCount = latestAnalysis
     ? Array.from(selectedIssueIdxs)
         .map(idx => latestAnalysis.top_issues[idx])
         .filter(i => i?.target_section !== 'none').length
     : 0;
 
-  // Check if the latest analysis already has an accepted or pending suggestion
-  const analysisHasPendingSuggestion = latestAnalysis?.suggestion_id
-    ? suggestions.some(s => s.id === latestAnalysis.suggestion_id && s.status === 'pending')
-    : false;
-  const analysisHasAcceptedSuggestion = latestAnalysis?.suggestion_id
+  // Find the pending suggestion linked to this analysis
+  const pendingSuggestion = latestAnalysis?.suggestion_id
+    ? suggestions.find(s => s.id === latestAnalysis.suggestion_id && s.status === 'pending') || null
+    : null;
+
+  const issuesAddressed = latestAnalysis?.suggestion_id
     ? suggestions.some(s => s.id === latestAnalysis.suggestion_id && s.status === 'accepted')
     : false;
-  const issuesAddressed = analysisHasAcceptedSuggestion;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -331,7 +332,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         <div className={`mb-6 p-4 rounded-xl font-semibold text-center ${
           statusMessage.startsWith('Error') || statusMessage.startsWith('Failed')
             ? 'bg-red-100 text-red-800'
-            : statusMessage.includes('complete') || statusMessage.includes('accepted') || statusMessage.includes('generated')
+            : statusMessage.includes('complete') || statusMessage.includes('accepted') || statusMessage.includes('generated') || statusMessage.includes('applied') || statusMessage.includes('Applied')
               ? 'bg-green-100 text-green-800'
               : 'bg-blue-100 text-blue-800'
         }`}>
@@ -359,7 +360,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-bold text-gray-900">Quality</h3>
@@ -376,21 +377,12 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
           <p className="text-sm text-gray-600 mt-1">Latest Score</p>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Pending</h3>
-            <span className="text-3xl">{pendingSuggestions.length > 0 ? '🔔' : '✓'}</span>
-          </div>
-          <p className="text-3xl font-extrabold text-blue-600">{pendingSuggestions.length}</p>
-          <p className="text-sm text-gray-600 mt-1">Suggestions</p>
-        </div>
-
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Accepted</h3>
+            <h3 className="text-lg font-bold text-gray-900">Improvements</h3>
             <span className="text-3xl">✅</span>
           </div>
-          <p className="text-3xl font-extrabold text-green-600">{acceptedCount}</p>
+          <p className="text-3xl font-extrabold text-green-600">{acceptedSuggestions.length}</p>
           <p className="text-sm text-gray-600 mt-1">Applied</p>
         </div>
 
@@ -450,12 +442,12 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                     )}
                   </h4>
                   <div className="flex items-center gap-3">
-                    {!issuesAddressed && !analysisHasPendingSuggestion && latestAnalysis.top_issues.length > 1 && (
+                    {!issuesAddressed && !pendingSuggestion && latestAnalysis.top_issues.length > 1 && (
                       <button
-                        onClick={selectedIssueIdxs.size === latestAnalysis.top_issues.length ? deselectAllIssues : selectAllIssues}
+                        onClick={selectedIssueIdxs.size === fixableSelectedCount && fixableSelectedCount > 0 ? deselectAllIssues : selectAllIssues}
                         className="text-sm text-purple-600 hover:text-purple-700 font-medium"
                       >
-                        {selectedIssueIdxs.size === latestAnalysis.top_issues.length ? 'Deselect All' : 'Select All'}
+                        {selectedIssueIdxs.size > 0 ? 'Deselect All' : 'Select All'}
                       </button>
                     )}
                   </div>
@@ -469,19 +461,10 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                   </div>
                 )}
 
-                {analysisHasPendingSuggestion && !issuesAddressed && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      A fix has been generated — review it in the Pending Suggestions section below.
-                    </p>
-                  </div>
-                )}
-
                 <div className="space-y-3">
                   {latestAnalysis.top_issues.map((issue, idx) => {
                     const isPlatformIssue = issue.target_section === 'none';
                     const isSelected = selectedIssueIdxs.has(idx);
-                    const showCheckbox = !issuesAddressed && !analysisHasPendingSuggestion;
 
                     return (
                       <div key={idx} className={`border rounded-xl overflow-hidden transition-all ${
@@ -489,7 +472,9 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                           ? 'border-green-200 bg-green-50/30 opacity-75'
                           : isSelected
                             ? 'border-purple-400 bg-purple-50/30 shadow-sm'
-                            : 'border-gray-200'
+                            : pendingSuggestion
+                              ? 'border-blue-200 bg-blue-50/20'
+                              : 'border-gray-200'
                       }`}>
                         <div className="flex items-center">
                           {/* Checkbox / Status indicator */}
@@ -500,9 +485,11 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                               </div>
-                            ) : analysisHasPendingSuggestion ? (
-                              <div className="w-5 h-5 rounded-full bg-blue-400 flex items-center justify-center" title="Fix pending review">
-                                <span className="text-xs text-white font-bold">⏳</span>
+                            ) : pendingSuggestion ? (
+                              <div className="w-5 h-5 rounded-full bg-blue-400 flex items-center justify-center" title="Fix ready for review">
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
                               </div>
                             ) : isPlatformIssue ? (
                               <div className="w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 flex items-center justify-center cursor-not-allowed" title="Platform-level issue — adjust in Retell settings">
@@ -580,7 +567,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                 </div>
 
                 {/* Generate Fix Button — only when issues are actionable */}
-                {!issuesAddressed && !analysisHasPendingSuggestion && (
+                {!issuesAddressed && !pendingSuggestion && (
                   <div className="mt-6 flex items-center gap-4">
                     <button
                       onClick={generateFixForSelectedIssues}
@@ -599,6 +586,76 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                     )}
                   </div>
                 )}
+
+                {/* ─── Inline Diff + Accept/Reject (when fix is generated) ──── */}
+                {pendingSuggestion && (
+                  <div className="mt-6 border-2 border-purple-300 rounded-xl bg-gradient-to-br from-purple-50/50 to-pink-50/50 overflow-hidden">
+                    <div className="px-6 py-4 bg-purple-100/60 border-b border-purple-200 flex items-center justify-between">
+                      <div>
+                        <h5 className="font-bold text-gray-900">{pendingSuggestion.title}</h5>
+                        <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-line">{pendingSuggestion.description}</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ml-4 ${
+                        pendingSuggestion.impact_estimate === 'high' ? 'bg-red-100 text-red-700' :
+                        pendingSuggestion.impact_estimate === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {pendingSuggestion.impact_estimate.toUpperCase()} IMPACT
+                      </span>
+                    </div>
+
+                    <div className="p-6">
+                      {/* Diff toggle */}
+                      <button
+                        onClick={() => setShowDiff(!showDiff)}
+                        className="text-sm font-semibold text-purple-600 hover:text-purple-700 mb-3"
+                      >
+                        {showDiff ? '▼ Hide' : '▶ Show'} Changes ({pendingSuggestion.proposed_changes.changes.length} section{pendingSuggestion.proposed_changes.changes.length > 1 ? 's' : ''})
+                      </button>
+
+                      {showDiff && (
+                        <div className="space-y-4 mb-4">
+                          {pendingSuggestion.proposed_changes.changes.map((change, idx) => (
+                            <div key={idx}>
+                              <div className="text-xs font-bold text-purple-600 mb-2 uppercase">
+                                {change.section}
+                              </div>
+                              {change.current_content && change.new_content ? (
+                                <DiffView
+                                  oldText={change.current_content}
+                                  newText={change.new_content}
+                                />
+                              ) : change.modification ? (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                  <p className="text-xs text-green-600 font-medium mb-1">APPEND:</p>
+                                  <p className="text-sm text-gray-700">{change.modification}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Accept / Reject */}
+                      <div className="flex gap-3 pt-4 border-t border-purple-200">
+                        <button
+                          onClick={() => handleAcceptSuggestion(pendingSuggestion.id)}
+                          disabled={processingId === pendingSuggestion.id}
+                          className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all disabled:opacity-50"
+                        >
+                          {processingId === pendingSuggestion.id ? 'Applying...' : 'Accept & Apply'}
+                        </button>
+                        <button
+                          onClick={() => handleRejectSuggestion(pendingSuggestion.id)}
+                          disabled={processingId === pendingSuggestion.id}
+                          className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-6">
@@ -611,132 +668,25 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {/* Pending Suggestions with Diff View */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6">
-          <h3 className="text-2xl font-bold text-white">
-            Pending Suggestions ({pendingSuggestions.length})
-          </h3>
-          <p className="text-purple-100 mt-1">Review and apply AI-generated prompt improvements</p>
-        </div>
-
-        <div className="p-8">
-          {pendingSuggestions.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-5xl mb-4">✓</div>
-              <h4 className="text-xl font-bold text-gray-900 mb-2">No pending suggestions</h4>
-              <p className="text-gray-600">
-                {latestAnalysis && latestAnalysis.top_issues.length > 0
-                  ? 'Select issues above and click "Generate Fix" to create a suggestion.'
-                  : latestAnalysis
-                    ? 'No issues found. Run a new analysis after more calls.'
-                    : 'Click "Run Analysis" to analyze recent calls and find issues.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {pendingSuggestions.map((suggestion) => (
-                <div key={suggestion.id} className="border-2 border-purple-200 rounded-xl p-6 bg-gradient-to-br from-purple-50/50 to-pink-50/50">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h4 className="text-xl font-bold text-gray-900 mb-2">{suggestion.title}</h4>
-                      <p className="text-gray-700 whitespace-pre-line">{suggestion.description}</p>
-                    </div>
-                    <div className="flex flex-col gap-2 items-end ml-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        suggestion.impact_estimate === 'high' ? 'bg-red-100 text-red-700' :
-                        suggestion.impact_estimate === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {suggestion.impact_estimate.toUpperCase()} IMPACT
-                      </span>
-                      <span className="text-sm text-gray-600">
-                        {(suggestion.confidence_score * 100).toFixed(0)}% confidence
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Diff View Toggle */}
-                  <div className="mb-4">
-                    <button
-                      onClick={() => setExpandedSuggestionId(expandedSuggestionId === suggestion.id ? null : suggestion.id)}
-                      className="text-sm font-semibold text-purple-600 hover:text-purple-700"
-                    >
-                      {expandedSuggestionId === suggestion.id ? '▼ Hide' : '▶ Show'} Changes ({suggestion.proposed_changes.changes.length})
-                    </button>
-
-                    {expandedSuggestionId === suggestion.id && (
-                      <div className="space-y-4 mt-3">
-                        {suggestion.proposed_changes.changes.map((change, idx) => (
-                          <div key={idx}>
-                            <div className="text-xs font-bold text-purple-600 mb-2 uppercase">
-                              {change.section}
-                            </div>
-
-                            {/* V2: Diff view for new_content changes */}
-                            {change.current_content && change.new_content ? (
-                              <DiffView
-                                oldText={change.current_content}
-                                newText={change.new_content}
-                              />
-                            ) : change.modification ? (
-                              /* Legacy: Show modification text */
-                              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                <p className="text-xs text-green-600 font-medium mb-1">APPEND:</p>
-                                <p className="text-sm text-gray-700">{change.modification}</p>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t border-gray-200">
-                    <button
-                      onClick={() => handleAcceptSuggestion(suggestion.id)}
-                      disabled={processingId === suggestion.id}
-                      className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all disabled:opacity-50"
-                    >
-                      {processingId === suggestion.id ? 'Applying...' : 'Accept & Apply'}
-                    </button>
-                    <button
-                      onClick={() => handleRejectSuggestion(suggestion.id)}
-                      disabled={processingId === suggestion.id}
-                      className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recently Accepted */}
-      {suggestions.filter(s => s.status === 'accepted').length > 0 && (
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+      {/* Improvements Applied */}
+      {acceptedSuggestions.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-8 py-6">
             <h3 className="text-2xl font-bold text-white">
-              Recently Accepted ({suggestions.filter(s => s.status === 'accepted').length})
+              Improvements Applied ({acceptedSuggestions.length})
             </h3>
           </div>
           <div className="p-8">
             <div className="space-y-3">
-              {suggestions
-                .filter(s => s.status === 'accepted')
-                .slice(0, 5)
+              {acceptedSuggestions
+                .slice(0, 10)
                 .map((s) => (
                   <div key={s.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
                     <div>
                       <p className="font-semibold text-gray-900">{s.title}</p>
-                      <p className="text-sm text-gray-600">{s.description?.substring(0, 100)}</p>
+                      <p className="text-sm text-gray-600">{s.description?.substring(0, 120)}</p>
                     </div>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-gray-500 shrink-0 ml-4">
                       {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
@@ -747,7 +697,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       )}
 
       {/* Empty state */}
-      {!latestAnalysis && pendingSuggestions.length === 0 && (
+      {!latestAnalysis && acceptedSuggestions.length === 0 && (
         <div className="text-center py-16">
           <div className="text-6xl mb-6">🤖</div>
           <h3 className="text-2xl font-bold text-gray-900 mb-3">Welcome to AI Sales Manager</h3>
