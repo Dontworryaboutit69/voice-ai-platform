@@ -228,36 +228,8 @@ export async function runBatchAnalysis(
     throw new Error('Failed to store analysis results');
   }
 
-  // 7. If top issue found, generate a section rewrite
-  let suggestionId: string | null = null;
-
-  // Find the first issue that targets an actual prompt section (skip "none" = platform-level issues)
-  const rewritableIssue = analysis.top_issues.find(i => i.target_section && i.target_section !== 'none');
-
-  if (rewritableIssue && Object.keys(promptSections).some(k => promptSections[k])) {
-    const topIssue = rewritableIssue;
-    console.log(`[AI Manager] Generating section rewrite for: "${topIssue.issue}" (target: ${topIssue.target_section})`);
-
-    try {
-      suggestionId = await generateSectionRewrite(
-        agentId,
-        topIssue,
-        promptSections,
-        interactiveCalls.map(c => c.id)
-      );
-
-      // Link suggestion to batch analysis
-      if (suggestionId) {
-        await supabase
-          .from('ai_batch_analyses')
-          .update({ suggestion_id: suggestionId })
-          .eq('id', batchRecord.id);
-      }
-    } catch (rewriteError: any) {
-      console.error('[AI Manager] Section rewrite failed (non-fatal):', rewriteError.message);
-      // Continue — analysis is still valuable without a suggestion
-    }
-  }
+  // 7. Return analysis — user selects which issues to fix via UI
+  // No auto-generated suggestion; the user picks issues and triggers a rewrite
 
   return {
     id: batchRecord.id,
@@ -266,7 +238,7 @@ export async function runBatchAnalysis(
     top_issues: analysis.top_issues,
     calls_analyzed: interactiveCalls.length,
     calls_skipped: skippedCount,
-    suggestion_id: suggestionId,
+    suggestion_id: null,
   };
 }
 
@@ -276,55 +248,132 @@ export async function runBatchAnalysis(
  * Generate a complete section rewrite for the top issue.
  * Makes ONE Claude call that returns the full rewritten section.
  */
-async function generateSectionRewrite(
+interface Issue {
+  issue: string;
+  severity: string;
+  target_section: string;
+  fix_guidance: string;
+  evidence: string[];
+}
+
+/**
+ * Generate a rewrite addressing multiple selected issues.
+ * Called from the API when the user selects issues and clicks "Generate Fix".
+ * Groups issues by target section and makes one Claude call per section.
+ */
+export async function generateRewriteForIssues(
   agentId: string,
-  issue: {
-    issue: string;
-    severity: string;
-    target_section: string;
-    fix_guidance: string;
-    evidence: string[];
-  },
-  promptSections: Record<string, string>,
-  sourceCallIds: string[]
+  issues: Issue[],
+  analysisId?: string
 ): Promise<string | null> {
-  const sectionKey = issue.target_section;
-  const currentContent = promptSections[sectionKey];
-
-  if (!currentContent || currentContent.trim().length === 0) {
-    console.log(`[AI Manager] Target section "${sectionKey}" is empty, skipping rewrite`);
-    return null;
-  }
-
-  const rewritePrompt = buildSectionRewritePrompt(sectionKey, currentContent, issue, promptSections);
-
-  console.log(`[AI Manager] Calling Claude for section rewrite (section: ${sectionKey})...`);
-
-  const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 6000,
-    messages: [{
-      role: 'user',
-      content: rewritePrompt
-    }]
-  });
-
-  const content = response.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from Claude');
-  }
-
-  // Extract the rewritten section from the response
-  const newContent = parseRewrittenSection(content.text);
-
-  if (!newContent || newContent.trim().length < 20) {
-    console.error('[AI Manager] Rewrite produced empty or too-short content');
-    return null;
-  }
-
-  // Store as a suggestion with current_content + new_content format
   const supabase = createServiceClient();
 
+  // Get current prompt sections
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('id, current_prompt_id, retell_agent_id')
+    .eq('id', agentId)
+    .single();
+
+  if (!agent?.current_prompt_id) {
+    throw new Error('Agent has no prompt configured');
+  }
+
+  const { data: promptVersion } = await supabase
+    .from('prompt_versions')
+    .select('id, prompt_role, prompt_personality, prompt_call_flow, prompt_info_recap, prompt_functions, prompt_knowledge')
+    .eq('id', agent.current_prompt_id)
+    .single();
+
+  if (!promptVersion) {
+    throw new Error('Prompt version not found');
+  }
+
+  const promptSections: Record<string, string> = {
+    role: promptVersion.prompt_role || '',
+    personality: promptVersion.prompt_personality || '',
+    call_flow: promptVersion.prompt_call_flow || '',
+    info_recap: promptVersion.prompt_info_recap || '',
+    functions: promptVersion.prompt_functions || '',
+    knowledge_base: promptVersion.prompt_knowledge || '',
+  };
+
+  // Filter out platform-level issues (target_section = "none")
+  const fixableIssues = issues.filter(i => i.target_section && i.target_section !== 'none');
+  if (fixableIssues.length === 0) {
+    throw new Error('No fixable issues selected (all are platform-level)');
+  }
+
+  // Group issues by target section
+  const issuesBySection: Record<string, Issue[]> = {};
+  for (const issue of fixableIssues) {
+    if (!issuesBySection[issue.target_section]) {
+      issuesBySection[issue.target_section] = [];
+    }
+    issuesBySection[issue.target_section].push(issue);
+  }
+
+  // Generate rewrites — one Claude call per section
+  const allChanges: Array<{ section: string; current_content: string; new_content: string }> = [];
+  const allSections: string[] = [];
+  const issueTitles: string[] = [];
+
+  for (const [sectionKey, sectionIssues] of Object.entries(issuesBySection)) {
+    const currentContent = promptSections[sectionKey];
+    if (!currentContent || currentContent.trim().length === 0) {
+      console.log(`[AI Manager] Section "${sectionKey}" is empty, skipping`);
+      continue;
+    }
+
+    const rewritePrompt = buildSectionRewritePrompt(sectionKey, currentContent, sectionIssues, promptSections);
+
+    console.log(`[AI Manager] Calling Claude for section rewrite (section: ${sectionKey}, issues: ${sectionIssues.length})...`);
+
+    const response = await getAnthropic().messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 6000,
+      messages: [{ role: 'user', content: rewritePrompt }]
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
+    }
+
+    const newContent = parseRewrittenSection(content.text);
+    if (!newContent || newContent.trim().length < 20) {
+      console.error(`[AI Manager] Rewrite for "${sectionKey}" produced empty content, skipping`);
+      continue;
+    }
+
+    allChanges.push({ section: sectionKey, current_content: currentContent, new_content: newContent });
+    allSections.push(sectionKey);
+    sectionIssues.forEach(i => issueTitles.push(i.issue));
+  }
+
+  if (allChanges.length === 0) {
+    throw new Error('All rewrites failed to produce content');
+  }
+
+  // Build a combined title
+  const title = allChanges.length === 1
+    ? `Improve ${allSections[0].replace(/_/g, ' ')}: ${issueTitles[0]}`
+    : `Fix ${issueTitles.length} issues across ${allSections.map(s => s.replace(/_/g, ' ')).join(', ')}`;
+
+  const description = fixableIssues.map(i => `• ${i.issue}: ${i.fix_guidance}`).join('\n');
+
+  // Get source call IDs from the analysis if available
+  let sourceCallIds: string[] = [];
+  if (analysisId) {
+    const { data: analysis } = await supabase
+      .from('ai_batch_analyses')
+      .select('call_ids')
+      .eq('id', analysisId)
+      .single();
+    sourceCallIds = analysis?.call_ids || [];
+  }
+
+  // Store as a single suggestion
   const { data: suggestion, error: insertError } = await supabase
     .from('ai_improvement_suggestions')
     .insert({
@@ -332,18 +381,14 @@ async function generateSectionRewrite(
       source_type: 'batch_analysis',
       source_call_ids: sourceCallIds,
       suggestion_type: 'prompt_change',
-      title: `Improve ${sectionKey.replace(/_/g, ' ')}: ${issue.issue}`,
-      description: issue.fix_guidance,
+      title,
+      description,
       proposed_changes: {
-        sections: [sectionKey],
-        changes: [{
-          section: sectionKey,
-          current_content: currentContent,
-          new_content: newContent,
-        }]
+        sections: allSections,
+        changes: allChanges,
       },
-      confidence_score: issue.severity === 'high' ? 0.9 : issue.severity === 'medium' ? 0.75 : 0.6,
-      impact_estimate: issue.severity,
+      confidence_score: 0.85,
+      impact_estimate: fixableIssues.some(i => i.severity === 'high') ? 'high' : 'medium',
       status: 'pending',
     })
     .select('id')
@@ -354,7 +399,15 @@ async function generateSectionRewrite(
     throw new Error('Failed to store improvement suggestion');
   }
 
-  console.log(`[AI Manager] Created suggestion ${suggestion.id} for section "${sectionKey}"`);
+  // Link to analysis if provided
+  if (analysisId) {
+    await supabase
+      .from('ai_batch_analyses')
+      .update({ suggestion_id: suggestion.id })
+      .eq('id', analysisId);
+  }
+
+  console.log(`[AI Manager] Created suggestion ${suggestion.id} (${allChanges.length} sections, ${issueTitles.length} issues)`);
   return suggestion.id;
 }
 
@@ -490,12 +543,7 @@ RULES:
 function buildSectionRewritePrompt(
   sectionKey: string,
   currentContent: string,
-  issue: {
-    issue: string;
-    severity: string;
-    fix_guidance: string;
-    evidence: string[];
-  },
+  issues: Issue[],
   allSections: Record<string, string>
 ): string {
   // Give full context of other sections so Claude understands the whole prompt
@@ -505,13 +553,19 @@ function buildSectionRewritePrompt(
     .map(([k, v]) => `[${k.toUpperCase()}]\n${v}`)
     .join('\n\n');
 
+  // Format issues — could be 1 or multiple
+  const issuesText = issues.map((issue, idx) => {
+    const num = issues.length > 1 ? `Issue ${idx + 1}: ` : '';
+    return `${num}${issue.issue}
+  Severity: ${issue.severity}
+  What went wrong: ${issue.fix_guidance}
+  Evidence: ${issue.evidence.join(' | ')}`;
+  }).join('\n\n');
+
   return `You are a senior voice AI prompt engineer reviewing a production phone agent. You've deployed 500+ agents and know exactly why prompts fail — the LLM takes shortcuts, ignores "mandatory" instructions, and skips sections it finds unnecessary. You fix prompts by RESTRUCTURING them so the correct behavior is the only possible path.
 
-ISSUE FOUND IN LIVE CALLS:
-- Problem: ${issue.issue}
-- Severity: ${issue.severity}
-- What went wrong: ${issue.fix_guidance}
-- Evidence: ${issue.evidence.join(' | ')}
+${issues.length > 1 ? `ISSUES FOUND IN LIVE CALLS (fix ALL of these in one rewrite):` : `ISSUE FOUND IN LIVE CALLS:`}
+${issuesText}
 
 FULL AGENT PROMPT FOR CONTEXT:
 ${otherSectionsContext || 'No other sections'}
@@ -520,7 +574,7 @@ SECTION TO REWRITE — "${sectionKey.toUpperCase()}":
 ${currentContent}
 
 YOUR JOB:
-Rewrite the "${sectionKey}" section above so the issue is ACTUALLY FIXED on the next call. You are doing what a human prompt engineer would do — restructure, delete, rewrite, add — whatever it takes.
+Rewrite the "${sectionKey}" section above so ${issues.length > 1 ? 'ALL of these issues are' : 'the issue is'} ACTUALLY FIXED on the next call. You are doing what a human prompt engineer would do — restructure, delete, rewrite, add — whatever it takes.
 
 HOW TO THINK ABOUT FIXES:
 - The current prompt already tells the agent to do the right thing, but the agent is ignoring it. Adding another line saying "this is mandatory" will NOT work. The LLM already ignores the existing instruction — adding a stronger adjective won't change that.
@@ -531,8 +585,8 @@ HOW TO THINK ABOUT FIXES:
 
 CONSTRAINTS:
 - Output the COMPLETE rewritten section, not a diff
-- Lines UNRELATED to the issue: keep them EXACTLY as-is (same words, same punctuation)
-- Lines RELATED to the issue: restructure as aggressively as needed
+- Lines UNRELATED to the issues: keep them EXACTLY as-is (same words, same punctuation)
+- Lines RELATED to the issues: restructure as aggressively as needed
 - This is a VOICE AI prompt — everything is spoken aloud by TTS. Never include system tokens like "NO_RESPONSE_NEEDED", "[pause]", etc. Describe behaviors in natural language.
 - Never include instructions about audio-level behaviors (interruption handling, response timing, turn-detection) — those are Retell platform settings, not prompt-controllable.
 - Do NOT add meta-labels like "IMPORTANT:", "CRITICAL:", "NOTE:", "MANDATORY:" — just write the actual content.

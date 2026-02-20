@@ -89,6 +89,10 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  // Multi-select state for issues
+  const [selectedIssueIdxs, setSelectedIssueIdxs] = useState<Set<number>>(new Set());
+  const [generatingFix, setGeneratingFix] = useState(false);
+
   useEffect(() => {
     loadData();
   }, [agentId]);
@@ -107,6 +111,9 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       const suggestionsRes = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`);
       const suggestionsData = await suggestionsRes.json();
       setSuggestions(suggestionsData.suggestions || []);
+
+      // Reset issue selection
+      setSelectedIssueIdxs(new Set());
     } catch (error) {
       console.error('Failed to load AI Manager data:', error);
     } finally {
@@ -149,6 +156,76 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  async function generateFixForSelectedIssues() {
+    if (!latestAnalysis || selectedIssueIdxs.size === 0) return;
+
+    const selectedIssues = Array.from(selectedIssueIdxs).map(idx => latestAnalysis.top_issues[idx]);
+
+    // Check if all selected are platform-level
+    const fixable = selectedIssues.filter(i => i.target_section !== 'none');
+    if (fixable.length === 0) {
+      setStatusMessage('All selected issues are platform-level. Adjust Retell speech settings instead.');
+      setTimeout(() => setStatusMessage(null), 5000);
+      return;
+    }
+
+    try {
+      setGeneratingFix(true);
+      setStatusMessage(`Generating fix for ${fixable.length} issue${fixable.length > 1 ? 's' : ''}... This takes 10-20 seconds.`);
+
+      const res = await fetch(`/api/agents/${agentId}/ai-manager/generate-fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issues: selectedIssues,
+          analysisId: latestAnalysis.id,
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStatusMessage(`Error: ${data.error || `HTTP ${res.status}`}`);
+        setTimeout(() => setStatusMessage(null), 8000);
+        return;
+      }
+
+      setStatusMessage(`Fix generated! Review the suggestion below.`);
+      setSelectedIssueIdxs(new Set());
+      await loadData();
+      setTimeout(() => setStatusMessage(null), 5000);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setStatusMessage(`Error: ${errorMessage}`);
+      console.error('Failed to generate fix:', error);
+      setTimeout(() => setStatusMessage(null), 5000);
+    } finally {
+      setGeneratingFix(false);
+    }
+  }
+
+  function toggleIssueSelection(idx: number) {
+    setSelectedIssueIdxs(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  }
+
+  function selectAllIssues() {
+    if (!latestAnalysis) return;
+    const allIdxs = latestAnalysis.top_issues.map((_, idx) => idx);
+    setSelectedIssueIdxs(new Set(allIdxs));
+  }
+
+  function deselectAllIssues() {
+    setSelectedIssueIdxs(new Set());
   }
 
   async function handleAcceptSuggestion(suggestionId: string) {
@@ -218,6 +295,13 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
   const pendingSuggestions = suggestions.filter(s => s.status === 'pending');
   const acceptedCount = suggestions.filter(s => s.status === 'accepted').length;
 
+  // Check if any selected issues are fixable (not platform-level)
+  const fixableSelectedCount = latestAnalysis
+    ? Array.from(selectedIssueIdxs)
+        .map(idx => latestAnalysis.top_issues[idx])
+        .filter(i => i?.target_section !== 'none').length
+    : 0;
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -238,7 +322,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         <div className={`mb-6 p-4 rounded-xl font-semibold text-center ${
           statusMessage.startsWith('Error') || statusMessage.startsWith('Failed')
             ? 'bg-red-100 text-red-800'
-            : statusMessage.includes('complete') || statusMessage.includes('accepted')
+            : statusMessage.includes('complete') || statusMessage.includes('accepted') || statusMessage.includes('generated')
               ? 'bg-green-100 text-green-800'
               : 'bg-blue-100 text-blue-800'
         }`}>
@@ -346,51 +430,127 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
               </div>
             )}
 
-            {/* Top Issues */}
+            {/* Top Issues with Checkboxes */}
             {latestAnalysis.top_issues.length > 0 ? (
               <div>
-                <h4 className="text-lg font-bold text-gray-900 mb-3">Issues Found</h4>
-                <div className="space-y-3">
-                  {latestAnalysis.top_issues.map((issue, idx) => (
-                    <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-lg font-bold text-gray-900">Issues Found</h4>
+                  <div className="flex items-center gap-3">
+                    {latestAnalysis.top_issues.length > 1 && (
                       <button
-                        onClick={() => setExpandedIssueIdx(expandedIssueIdx === idx ? null : idx)}
-                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        onClick={selectedIssueIdxs.size === latestAnalysis.top_issues.length ? deselectAllIssues : selectAllIssues}
+                        className="text-sm text-purple-600 hover:text-purple-700 font-medium"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                            issue.severity === 'high' ? 'bg-red-100 text-red-700' :
-                            issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {issue.severity.toUpperCase()}
-                          </span>
-                          <span className="font-semibold text-gray-900">{issue.issue}</span>
-                        </div>
-                        <span className="text-gray-400 text-sm">
-                          {expandedIssueIdx === idx ? '▼' : '▶'} {issue.target_section}
-                        </span>
+                        {selectedIssueIdxs.size === latestAnalysis.top_issues.length ? 'Deselect All' : 'Select All'}
                       </button>
+                    )}
+                  </div>
+                </div>
 
-                      {expandedIssueIdx === idx && (
-                        <div className="px-6 pb-4 border-t border-gray-100">
-                          <p className="text-gray-700 mt-3 mb-3">{issue.fix_guidance}</p>
-                          {issue.evidence.length > 0 && (
-                            <div>
-                              <p className="text-sm font-medium text-gray-500 mb-2">Evidence:</p>
-                              <ul className="space-y-1">
-                                {issue.evidence.map((e, eIdx) => (
-                                  <li key={eIdx} className="text-sm text-gray-600 pl-4 border-l-2 border-gray-200">
-                                    {e}
-                                  </li>
-                                ))}
-                              </ul>
+                <div className="space-y-3">
+                  {latestAnalysis.top_issues.map((issue, idx) => {
+                    const isPlatformIssue = issue.target_section === 'none';
+                    const isSelected = selectedIssueIdxs.has(idx);
+
+                    return (
+                      <div key={idx} className={`border rounded-xl overflow-hidden transition-all ${
+                        isSelected ? 'border-purple-400 bg-purple-50/30 shadow-sm' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-center">
+                          {/* Checkbox */}
+                          <div className="pl-4 py-4 flex items-center">
+                            {isPlatformIssue ? (
+                              <div className="w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 flex items-center justify-center cursor-not-allowed" title="Platform-level issue — adjust in Retell settings">
+                                <span className="text-xs text-gray-400">⚙</span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => toggleIssueSelection(idx)}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                  isSelected
+                                    ? 'bg-purple-600 border-purple-600'
+                                    : 'border-gray-300 hover:border-purple-400'
+                                }`}
+                              >
+                                {isSelected && (
+                                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Issue content */}
+                          <button
+                            onClick={() => setExpandedIssueIdx(expandedIssueIdx === idx ? null : idx)}
+                            className="flex-1 px-4 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                issue.severity === 'high' ? 'bg-red-100 text-red-700' :
+                                issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {issue.severity.toUpperCase()}
+                              </span>
+                              <span className="font-semibold text-gray-900">{issue.issue}</span>
+                              {isPlatformIssue && (
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                                  PLATFORM
+                                </span>
+                              )}
                             </div>
-                          )}
+                            <span className="text-gray-400 text-sm">
+                              {expandedIssueIdx === idx ? '▼' : '▶'} {isPlatformIssue ? 'retell settings' : issue.target_section}
+                            </span>
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {expandedIssueIdx === idx && (
+                          <div className="px-6 pb-4 border-t border-gray-100 ml-9">
+                            <p className="text-gray-700 mt-3 mb-3">{issue.fix_guidance}</p>
+                            {isPlatformIssue && (
+                              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                                This is a platform-level issue. Adjust it in Retell&apos;s agent speech settings (Interruption Sensitivity, Responsiveness, etc.) — not the prompt.
+                              </p>
+                            )}
+                            {issue.evidence.length > 0 && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-500 mb-2">Evidence:</p>
+                                <ul className="space-y-1">
+                                  {issue.evidence.map((e, eIdx) => (
+                                    <li key={eIdx} className="text-sm text-gray-600 pl-4 border-l-2 border-gray-200">
+                                      {e}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Generate Fix Button */}
+                <div className="mt-6 flex items-center gap-4">
+                  <button
+                    onClick={generateFixForSelectedIssues}
+                    disabled={selectedIssueIdxs.size === 0 || generatingFix || fixableSelectedCount === 0}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingFix
+                      ? 'Generating Fix...'
+                      : fixableSelectedCount > 0
+                        ? `Generate Fix (${fixableSelectedCount} issue${fixableSelectedCount > 1 ? 's' : ''})`
+                        : 'Select Issues to Fix'
+                    }
+                  </button>
+                  {selectedIssueIdxs.size > 0 && fixableSelectedCount === 0 && (
+                    <p className="text-sm text-amber-600">Only platform-level issues selected</p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -419,9 +579,11 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
               <div className="text-5xl mb-4">✓</div>
               <h4 className="text-xl font-bold text-gray-900 mb-2">No pending suggestions</h4>
               <p className="text-gray-600">
-                {latestAnalysis
-                  ? 'All suggestions have been reviewed. Run a new analysis to check for improvements.'
-                  : 'Click "Run Analysis" to analyze recent calls and generate suggestions.'}
+                {latestAnalysis && latestAnalysis.top_issues.length > 0
+                  ? 'Select issues above and click "Generate Fix" to create a suggestion.'
+                  : latestAnalysis
+                    ? 'No issues found. Run a new analysis after more calls.'
+                    : 'Click "Run Analysis" to analyze recent calls and find issues.'}
               </p>
             </div>
           ) : (
@@ -432,7 +594,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <h4 className="text-xl font-bold text-gray-900 mb-2">{suggestion.title}</h4>
-                      <p className="text-gray-700">{suggestion.description}</p>
+                      <p className="text-gray-700 whitespace-pre-line">{suggestion.description}</p>
                     </div>
                     <div className="flex flex-col gap-2 items-end ml-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -544,7 +706,7 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
           <h3 className="text-2xl font-bold text-gray-900 mb-3">Welcome to AI Sales Manager</h3>
           <p className="text-gray-600 mb-6 max-w-lg mx-auto">
             Click &ldquo;Run Analysis&rdquo; to analyze your recent calls. The AI will identify quality issues
-            and suggest prompt improvements with before/after comparisons.
+            and you can select which ones to fix.
           </p>
           <p className="text-sm text-gray-500">
             Auto-triggers after every 10 completed calls.
