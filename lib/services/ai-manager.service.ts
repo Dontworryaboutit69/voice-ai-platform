@@ -523,6 +523,7 @@ REWRITE RULES:
 6. Do NOT add meta-instructions like "IMPORTANT:", "CRITICAL:", "NOTE:" — write natural prompt instructions
 7. Maintain the tone and style of the original section
 8. If the section has clear sub-sections or numbered steps, maintain that structure
+9. CRITICAL — THIS IS A VOICE AI PROMPT. Everything you write will be spoken aloud by a text-to-speech engine. NEVER include literal system tokens, technical commands, or placeholders like "NO_RESPONSE_NEEDED", "WAIT", "SILENCE", "[pause]", etc. Instead, describe the BEHAVIOR in natural language (e.g., "If the caller is still speaking, wait silently until they finish before responding.")
 
 Return ONLY the rewritten section content. Do NOT include any JSON, markdown code blocks, or explanatory text. Just the raw section content that will replace the current content.`;
 }
