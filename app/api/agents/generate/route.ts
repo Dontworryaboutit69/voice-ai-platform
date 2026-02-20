@@ -102,7 +102,8 @@ If the personality is just word substitutions ("says 'yeah' instead of 'yes'"), 
 2. Keep the EXACT same 6-section structure (## 1 through ## 6)
 3. Keep the same agent name, company name, and all company details EXACTLY as provided
 4. Do NOT add commentary, notes, or explanation — return ONLY the enhanced prompt
-5. FINAL SIZE: Within 10-15% of input size. If you added 500 chars of good stuff, trim 300-500 chars of bad stuff elsewhere.`;
+5. FINAL SIZE: Within 10-15% of input size. If you added 500 chars of good stuff, trim 300-500 chars of bad stuff elsewhere.
+6. Do NOT add instructions about audio-level behaviors that are handled by the Retell platform, NOT the prompt. Never add instructions about: interruption handling (stopping/yielding when the caller talks over you), response latency or timing, audio overlap prevention, turn-detection sensitivity, or background noise. These are controlled by Retell's agent speech settings (Interruption Sensitivity, Responsiveness, etc.) and putting them in the prompt has no effect. If you see such instructions in the draft, REMOVE them.`;
 
 /* ─── Website Scraper ─── */
 

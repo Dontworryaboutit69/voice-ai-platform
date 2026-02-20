@@ -396,5 +396,6 @@ When generating, verify:
 - Do NOT reference "looking up" or "researching" things the AI cannot actually access
 - Do NOT create a thin Knowledge Base — make it detailed with FAQs and descriptions
 - Do NOT truncate the closing section — complete every section fully
+- Do NOT include instructions about audio-level behaviors that are controlled by the Retell platform settings, NOT the prompt. These include: interruption handling (when to stop/yield to the caller mid-sentence), response latency/timing, audio overlap prevention, background noise handling, turn-detection sensitivity. These are configured via Retell's agent speech settings (Interruption Sensitivity, Responsiveness, etc.) — never put them in the prompt.
 $$
 WHERE name = 'retell_voice_ai_framework';
