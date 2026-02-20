@@ -5,9 +5,9 @@ export async function POST() {
   try {
     const supabase = createServiceClient();
 
-    console.log('[Migration] Starting AI Manager migration...');
+    console.log('[Migration] Starting AI Manager v2 migration...');
 
-    // Create ai_call_evaluations table
+    // Create ai_call_evaluations table (legacy, kept for backward compat)
     const { error: evalTableError } = await supabase.rpc('exec_sql', {
       sql: `
         create table if not exists public.ai_call_evaluations (
@@ -34,7 +34,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to create ai_call_evaluations table', details: evalTableError }, { status: 500 });
     }
 
-    console.log('[Migration] ✅ Created ai_call_evaluations table');
+    console.log('[Migration] Created ai_call_evaluations table');
 
     // Create ai_improvement_suggestions table
     const { error: sugTableError } = await supabase.rpc('exec_sql', {
@@ -42,7 +42,7 @@ export async function POST() {
         create table if not exists public.ai_improvement_suggestions (
           id uuid primary key default uuid_generate_v4(),
           agent_id uuid references public.agents(id) on delete cascade not null,
-          source_type text not null check (source_type in ('pattern_analysis', 'batch_evaluation')),
+          source_type text not null check (source_type in ('pattern_analysis', 'batch_evaluation', 'batch_analysis')),
           source_call_ids uuid[] not null,
           suggestion_type text not null default 'prompt_change',
           title text not null,
@@ -64,9 +64,9 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to create ai_improvement_suggestions table', details: sugTableError }, { status: 500 });
     }
 
-    console.log('[Migration] ✅ Created ai_improvement_suggestions table');
+    console.log('[Migration] Created ai_improvement_suggestions table');
 
-    // Create ai_pattern_analysis table
+    // Create ai_pattern_analysis table (legacy, kept for backward compat)
     const { error: patTableError } = await supabase.rpc('exec_sql', {
       sql: `
         create table if not exists public.ai_pattern_analysis (
@@ -89,14 +89,78 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to create ai_pattern_analysis table', details: patTableError }, { status: 500 });
     }
 
-    console.log('[Migration] ✅ Created ai_pattern_analysis table');
+    console.log('[Migration] Created ai_pattern_analysis table');
 
-    console.log('[Migration] ✅ All tables created successfully!');
+    // NEW: Create ai_batch_analyses table for v2
+    const { error: batchTableError } = await supabase.rpc('exec_sql', {
+      sql: `
+        create table if not exists public.ai_batch_analyses (
+          id uuid primary key default uuid_generate_v4(),
+          agent_id uuid references public.agents(id) on delete cascade not null,
+          call_ids uuid[] not null,
+          calls_analyzed integer not null,
+          calls_skipped integer not null default 0,
+          overall_quality_score real,
+          strengths jsonb default '[]'::jsonb,
+          top_issues jsonb default '[]'::jsonb,
+          calls_summary jsonb,
+          prompt_version_id uuid references public.prompt_versions(id),
+          suggestion_id uuid references public.ai_improvement_suggestions(id),
+          analysis_model text default 'claude-sonnet-4-5-20250929',
+          created_at timestamptz default now()
+        );
+      `
+    });
+
+    if (batchTableError) {
+      console.error('[Migration] Error creating ai_batch_analyses:', batchTableError);
+      return NextResponse.json({ error: 'Failed to create ai_batch_analyses table', details: batchTableError }, { status: 500 });
+    }
+
+    console.log('[Migration] Created ai_batch_analyses table');
+
+    // Update source_type constraint to allow 'batch_analysis'
+    const { error: constraintError } = await supabase.rpc('exec_sql', {
+      sql: `
+        DO $$
+        BEGIN
+          -- Drop old constraint if it exists
+          ALTER TABLE public.ai_improvement_suggestions
+            DROP CONSTRAINT IF EXISTS ai_improvement_suggestions_source_type_check;
+          -- Add new constraint allowing batch_analysis
+          ALTER TABLE public.ai_improvement_suggestions
+            ADD CONSTRAINT ai_improvement_suggestions_source_type_check
+            CHECK (source_type IN ('pattern_analysis', 'batch_evaluation', 'batch_analysis'));
+        EXCEPTION WHEN OTHERS THEN
+          RAISE NOTICE 'Constraint update skipped: %', SQLERRM;
+        END $$;
+      `
+    });
+
+    if (constraintError) {
+      console.warn('[Migration] Constraint update warning (non-fatal):', constraintError);
+    }
+
+    // Create indexes for batch analyses
+    const { error: indexError } = await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE INDEX IF NOT EXISTS idx_ai_batch_analyses_agent_id
+          ON public.ai_batch_analyses(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_batch_analyses_created_at
+          ON public.ai_batch_analyses(created_at DESC);
+      `
+    });
+
+    if (indexError) {
+      console.warn('[Migration] Index creation warning (non-fatal):', indexError);
+    }
+
+    console.log('[Migration] All tables created successfully!');
 
     return NextResponse.json({
       success: true,
-      message: 'AI Manager migration completed successfully',
-      tables: ['ai_call_evaluations', 'ai_improvement_suggestions', 'ai_pattern_analysis']
+      message: 'AI Manager v2 migration completed successfully',
+      tables: ['ai_call_evaluations', 'ai_improvement_suggestions', 'ai_pattern_analysis', 'ai_batch_analyses']
     });
 
   } catch (error) {

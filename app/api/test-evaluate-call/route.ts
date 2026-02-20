@@ -1,30 +1,27 @@
 import { NextResponse } from 'next/server';
-import { evaluateCall } from '@/lib/services/ai-manager.service';
+import { runBatchAnalysis } from '@/lib/services/ai-manager.service';
 
+/**
+ * Test endpoint for AI Manager batch analysis.
+ * Usage: GET /api/test-evaluate-call?agentId=xxx
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const callId = searchParams.get('callId');
+    const agentId = searchParams.get('agentId');
 
-    if (!callId) {
-      return NextResponse.json({ error: 'callId required' }, { status: 400 });
+    if (!agentId) {
+      return NextResponse.json({ error: 'agentId required' }, { status: 400 });
     }
 
-    console.log(`[Test] Evaluating call ${callId}...`);
+    console.log(`[Test] Running batch analysis for agent ${agentId}...`);
 
-    const result = await evaluateCall(callId);
-
-    if (!result) {
-      return NextResponse.json({
-        message: 'Call was filtered out (non-interactive)',
-        callId,
-      });
-    }
+    const result = await runBatchAnalysis(agentId, { callCount: 5, daysSince: 7 });
 
     return NextResponse.json({
-      message: 'Evaluation completed',
-      callId,
-      evaluation: result,
+      message: 'Batch analysis completed',
+      agentId,
+      result,
     });
   } catch (error: any) {
     console.error('[Test] Error:', error);

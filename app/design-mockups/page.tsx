@@ -347,12 +347,33 @@ function NebulaEdgeTheme() {
 }
 
 // ============================================================
+// 9. NEBULA PRO LIGHT — Same blue/cyan energy on a light base
+// Clean, airy, professional. Dark sidebar keeps the brand punch.
+// ============================================================
+function NebulaProLightTheme() {
+  const accent1 = "#2563eb";
+  const accent2 = "#0891b2";
+  const accentGrad = "linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #06b6d4 100%)";
+  const accentGradSoft = "linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)";
+  return (
+    <div style={{ display: "flex", height: 780, background: "#f1f5f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar bg="#0f172a" border="rgba(255,255,255,0.08)" brandGrad={accentGrad} brandShadow="0 2px 12px rgba(59,130,246,0.35)" searchBg="rgba(255,255,255,0.06)" searchBorder="rgba(255,255,255,0.1)" textSec="rgba(255,255,255,0.55)" textMut="rgba(255,255,255,0.3)" activeColor="#fff" activeBg={accentGradSoft} activeShadow="0 2px 8px rgba(59,130,246,0.3)" activeTextColor="#fff" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Header bg="#ffffff" border="#e2e8f0" accentBg="rgba(37,99,235,0.08)" accentColor={accent1} accentGrad={accentGrad} textPri="#0f172a" textSec="#475569" textMut="#94a3b8" />
+        <Pipeline surface="#ffffff" border="#e2e8f0" accentBg="rgba(37,99,235,0.07)" accentColor={accent1} accentColor2={accent2} textPri="#0f172a" textSec="#475569" textMut="#94a3b8" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN PAGE — All designs
 // ============================================================
 export default function DesignMockups() {
   const [selected, setSelected] = useState<number | null>(null);
 
   const themes = [
+    { name: "Nebula Pro Light", desc: "Same blue/cyan gradient energy — dark sidebar, light slate/white content area", round: "New", component: <NebulaProLightTheme /> },
     { name: "Nebula Pro", desc: "Deep blue to electric blue/cyan gradients — strong, professional, tech-forward", round: "Final", component: <NebulaProTheme /> },
     { name: "Nebula Edge", desc: "Indigo to teal/emerald gradients — bold, premium, modern", round: "Final", component: <NebulaEdgeTheme /> },
     { name: "Obsidian", desc: "Ultra-dark with cyan/teal accents — Linear/Raycast vibe", round: 1, component: <ThemeObsidian /> },

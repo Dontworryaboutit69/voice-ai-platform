@@ -1,6 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { diffLines, Change } from 'diff';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface BatchAnalysis {
+  id: string;
+  overall_quality_score: number;
+  strengths: Array<{ label: string; detail: string }>;
+  top_issues: Array<{
+    issue: string;
+    severity: 'low' | 'medium' | 'high';
+    target_section: string;
+    fix_guidance: string;
+    evidence: string[];
+  }>;
+  calls_analyzed: number;
+  calls_skipped: number;
+  suggestion_id: string | null;
+  created_at: string;
+}
 
 interface Suggestion {
   id: string;
@@ -14,40 +34,58 @@ interface Suggestion {
     sections: string[];
     changes: Array<{
       section: string;
-      modification: string;
+      modification?: string;    // Legacy
+      current_content?: string;  // V2
+      new_content?: string;      // V2
     }>;
   };
   created_at: string;
 }
 
-interface Evaluation {
-  id: string;
-  call_id: string;
-  quality_score: number;
-  empathy_score: number;
-  professionalism_score: number;
-  efficiency_score: number;
-  goal_achievement_score: number;
-  issues_detected: Array<{
-    type: string;
-    severity: 'low' | 'medium' | 'high';
-    turn: number;
-    example: string;
-  }>;
-  opportunities: Array<{
-    type: string;
-    description: string;
-  }>;
-  summary_analysis: string;
-  created_at: string;
+// ─── Diff View Component ─────────────────────────────────────────────────────
+
+function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const changes: Change[] = diffLines(oldText, newText);
+
+  return (
+    <div className="font-mono text-sm overflow-x-auto rounded-lg border border-gray-300 bg-gray-50">
+      {changes.map((change, idx) => {
+        const lines = change.value.split('\n').filter((l, i, arr) =>
+          // Keep all lines except trailing empty
+          i < arr.length - 1 || l.length > 0
+        );
+
+        return lines.map((line, lineIdx) => (
+          <div
+            key={`${idx}-${lineIdx}`}
+            className={`px-4 py-0.5 border-b border-gray-200 last:border-b-0 ${
+              change.added
+                ? 'bg-green-100 text-green-900'
+                : change.removed
+                  ? 'bg-red-100 text-red-900 line-through'
+                  : 'bg-white text-gray-700'
+            }`}
+          >
+            <span className="inline-block w-6 text-gray-400 select-none mr-2">
+              {change.added ? '+' : change.removed ? '-' : ' '}
+            </span>
+            {line || ' '}
+          </div>
+        ));
+      })}
+    </div>
+  );
 }
 
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export default function AIManagerTab({ agentId }: { agentId: string }) {
+  const [latestAnalysis, setLatestAnalysis] = useState<BatchAnalysis | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [analyzingPatterns, setAnalyzingPatterns] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [expandedSuggestionId, setExpandedSuggestionId] = useState<string | null>(null);
+  const [expandedIssueIdx, setExpandedIssueIdx] = useState<number | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -59,15 +97,16 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
     try {
       setLoading(true);
 
+      // Load batch analyses
+      const analysisRes = await fetch(`/api/agents/${agentId}/ai-manager/analyze`);
+      const analysisData = await analysisRes.json();
+      const analyses = analysisData.analyses || [];
+      setLatestAnalysis(analyses.length > 0 ? analyses[0] : null);
+
       // Load suggestions
       const suggestionsRes = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`);
       const suggestionsData = await suggestionsRes.json();
       setSuggestions(suggestionsData.suggestions || []);
-
-      // Load evaluations
-      const evaluationsRes = await fetch(`/api/agents/${agentId}/ai-manager/evaluations`);
-      const evaluationsData = await evaluationsRes.json();
-      setEvaluations(evaluationsData.evaluations || []);
     } catch (error) {
       console.error('Failed to load AI Manager data:', error);
     } finally {
@@ -75,13 +114,49 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
     }
   }
 
+  async function triggerAnalysis() {
+    try {
+      setAnalyzing(true);
+      setStatusMessage('Running batch analysis... This takes 15-25 seconds.');
+
+      const res = await fetch(`/api/agents/${agentId}/ai-manager/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callCount: 10, daysSince: 7 })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStatusMessage(`Error: ${data.error || `HTTP ${res.status}`}`);
+        setTimeout(() => setStatusMessage(null), 8000);
+        return;
+      }
+
+      const analysis = data.analysis;
+      setStatusMessage(
+        `Analysis complete! Quality: ${(analysis.overall_quality_score * 100).toFixed(0)}%, ` +
+        `${analysis.calls_analyzed} calls analyzed, ` +
+        `${analysis.top_issues.length} issues found.`
+      );
+      await loadData();
+      setTimeout(() => setStatusMessage(null), 6000);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setStatusMessage(`Error: ${errorMessage}`);
+      console.error('Failed to run analysis:', error);
+      setTimeout(() => setStatusMessage(null), 5000);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   async function handleAcceptSuggestion(suggestionId: string) {
-    // Use system user ID since we don't have auth yet
     const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
     try {
       setProcessingId(suggestionId);
-      setStatusMessage('Applying suggestion and creating new prompt version...');
+      setStatusMessage('Applying suggestion and syncing to Retell...');
 
       const res = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`, {
         method: 'POST',
@@ -96,18 +171,15 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       const data = await res.json();
 
       if (data.success) {
-        setStatusMessage('✅ Suggestion accepted! New prompt version created.');
-        // Success - reload data to show updated state
+        setStatusMessage('Suggestion accepted! Prompt updated and synced to Retell.');
         await loadData();
-        setTimeout(() => setStatusMessage(null), 3000);
+        setTimeout(() => setStatusMessage(null), 4000);
       } else {
-        setStatusMessage(`❌ Failed: ${data.error || 'Unknown error'}`);
-        console.error('Failed to accept suggestion:', data.error);
+        setStatusMessage(`Failed: ${data.error || 'Unknown error'}`);
         setTimeout(() => setStatusMessage(null), 5000);
       }
     } catch (error) {
-      setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      console.error('Failed to accept suggestion:', error);
+      setStatusMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setTimeout(() => setStatusMessage(null), 5000);
     } finally {
       setProcessingId(null);
@@ -115,11 +187,10 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
   }
 
   async function handleRejectSuggestion(suggestionId: string) {
-    // Use system user ID since we don't have auth yet
     const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
     try {
-      setLoading(true);
+      setProcessingId(suggestionId);
 
       const res = await fetch(`/api/agents/${agentId}/ai-manager/suggestions`, {
         method: 'POST',
@@ -132,104 +203,29 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       });
 
       const data = await res.json();
-
       if (data.success) {
-        // Success - reload data
         await loadData();
-      } else {
-        console.error('Failed to reject suggestion:', data.error);
       }
     } catch (error) {
       console.error('Failed to reject suggestion:', error);
     } finally {
-      setLoading(false);
+      setProcessingId(null);
     }
   }
 
-  async function runSingleBatch(): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`/api/agents/${agentId}/ai-manager/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ daysSince: 7 })
-    });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` };
-    return { success: true, data };
-  }
-
-  async function triggerPatternAnalysis() {
-    try {
-      setAnalyzingPatterns(true);
-
-      let totalEvaluated = 0;
-      let totalSkipped = 0;
-      let totalErrors = 0;
-      let batchNum = 0;
-      const maxBatches = 15; // Safety limit
-
-      while (batchNum < maxBatches) {
-        batchNum++;
-        setStatusMessage(`Analyzing calls (batch ${batchNum})... This may take a moment.`);
-
-        const result = await runSingleBatch();
-
-        if (!result.success) {
-          setStatusMessage(`❌ ${result.error}`);
-          setTimeout(() => setStatusMessage(null), 8000);
-          return;
-        }
-
-        const data = result.data;
-        totalEvaluated += data.evaluated || 0;
-        totalSkipped += data.skipped || 0;
-        totalErrors += data.errors || 0;
-
-        // If there are still more calls to process, continue automatically
-        if (data.timedOut) {
-          setStatusMessage(`Evaluated ${totalEvaluated} calls so far... continuing (batch ${batchNum + 1})`);
-          await loadData(); // Refresh UI with partial results
-          continue;
-        }
-
-        // All done
-        const parts = [`Evaluated ${totalEvaluated} calls`];
-        if (totalSkipped) parts.push(`skipped ${totalSkipped} non-interactive`);
-        if (data.patternsAnalyzed) parts.push('suggestions generated');
-        if (data.patternError) parts.push(`Note: ${data.patternError}`);
-
-        setStatusMessage(`✅ Analysis complete! ${parts.join(', ')}.`);
-        await loadData();
-        setTimeout(() => setStatusMessage(null), 5000);
-        return;
-      }
-
-      // Hit max batches
-      setStatusMessage(`✅ Evaluated ${totalEvaluated} calls across ${batchNum} batches. Click again if more remain.`);
-      await loadData();
-      setTimeout(() => setStatusMessage(null), 8000);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setStatusMessage(`❌ Error: ${errorMessage}`);
-      console.error('Failed to run pattern analysis:', error);
-      setTimeout(() => setStatusMessage(null), 5000);
-    } finally {
-      setAnalyzingPatterns(false);
-    }
-  }
+  // ─── Derived state ──────────────────────────────────────────────────────────
 
   const pendingSuggestions = suggestions.filter(s => s.status === 'pending');
-  const acceptedSuggestions = suggestions.filter(s => s.status === 'accepted');
+  const acceptedCount = suggestions.filter(s => s.status === 'accepted').length;
 
-  const avgQuality = evaluations.length > 0
-    ? evaluations.reduce((sum, e) => sum + e.quality_score, 0) / evaluations.length
-    : 0;
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading AI Manager data...</p>
+          <p className="text-gray-600">Loading AI Manager...</p>
         </div>
       </div>
     );
@@ -240,9 +236,11 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       {/* Status Message */}
       {statusMessage && (
         <div className={`mb-6 p-4 rounded-xl font-semibold text-center ${
-          statusMessage.startsWith('✅') ? 'bg-green-100 text-green-800' :
-          statusMessage.startsWith('❌') ? 'bg-red-100 text-red-800' :
-          'bg-blue-100 text-blue-800'
+          statusMessage.startsWith('Error') || statusMessage.startsWith('Failed')
+            ? 'bg-red-100 text-red-800'
+            : statusMessage.includes('complete') || statusMessage.includes('accepted')
+              ? 'bg-green-100 text-green-800'
+              : 'bg-blue-100 text-blue-800'
         }`}>
           {statusMessage}
         </div>
@@ -252,89 +250,185 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
       <div className="mb-10 flex items-center justify-between">
         <div>
           <h2 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-3">
-            🤖 AI Manager
+            AI Sales Manager
           </h2>
-          <p className="text-lg text-gray-600">Automatic call analysis and improvement suggestions</p>
+          <p className="text-lg text-gray-600">
+            Batch call analysis with intelligent prompt improvements
+          </p>
         </div>
         <button
-          onClick={triggerPatternAnalysis}
-          disabled={analyzingPatterns}
+          onClick={triggerAnalysis}
+          disabled={analyzing}
           className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
         >
-          {analyzingPatterns ? '⏳ Analyzing...' : '🔄 Run Analysis'}
+          {analyzing ? 'Analyzing...' : 'Run Analysis'}
         </button>
       </div>
 
-      {/* Overview Stats */}
+      {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Pending</h3>
-            <span className="text-3xl">⏳</span>
+            <h3 className="text-lg font-bold text-gray-900">Quality</h3>
+            <span className="text-3xl">
+              {latestAnalysis
+                ? latestAnalysis.overall_quality_score >= 0.8 ? '🟢' : latestAnalysis.overall_quality_score >= 0.6 ? '🟡' : '🔴'
+                : '⚪'
+              }
+            </span>
           </div>
-          <p className="text-3xl font-extrabold text-purple-600">{pendingSuggestions.length}</p>
-          <p className="text-sm text-gray-600 mt-1">Suggestions</p>
+          <p className="text-3xl font-extrabold text-purple-600">
+            {latestAnalysis ? `${(latestAnalysis.overall_quality_score * 100).toFixed(0)}%` : '—'}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">Latest Score</p>
         </div>
 
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Analyzed</h3>
-            <span className="text-3xl">📊</span>
+            <h3 className="text-lg font-bold text-gray-900">Pending</h3>
+            <span className="text-3xl">{pendingSuggestions.length > 0 ? '🔔' : '✓'}</span>
           </div>
-          <p className="text-3xl font-extrabold text-blue-600">{evaluations.length}</p>
-          <p className="text-sm text-gray-600 mt-1">Calls</p>
+          <p className="text-3xl font-extrabold text-blue-600">{pendingSuggestions.length}</p>
+          <p className="text-sm text-gray-600 mt-1">Suggestions</p>
         </div>
 
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Quality</h3>
-            <span className="text-3xl">⭐</span>
+            <h3 className="text-lg font-bold text-gray-900">Accepted</h3>
+            <span className="text-3xl">✅</span>
           </div>
-          <p className="text-3xl font-extrabold text-green-600">{(avgQuality * 100).toFixed(0)}%</p>
-          <p className="text-sm text-gray-600 mt-1">Avg Score</p>
+          <p className="text-3xl font-extrabold text-green-600">{acceptedCount}</p>
+          <p className="text-sm text-gray-600 mt-1">Applied</p>
         </div>
 
         <div className="bg-gradient-to-br from-orange-50 to-yellow-50 rounded-2xl p-6 border-2 border-orange-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">Accepted</h3>
-            <span className="text-3xl">✅</span>
+            <h3 className="text-lg font-bold text-gray-900">Analyzed</h3>
+            <span className="text-3xl">📊</span>
           </div>
-          <p className="text-3xl font-extrabold text-orange-600">{acceptedSuggestions.length}</p>
-          <p className="text-sm text-gray-600 mt-1">Applied</p>
+          <p className="text-3xl font-extrabold text-orange-600">
+            {latestAnalysis ? latestAnalysis.calls_analyzed : 0}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">Last Batch</p>
         </div>
       </div>
 
-      {/* Pending Suggestions */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-              <span>📝</span> Pending Suggestions ({pendingSuggestions.length})
-            </h3>
-            <p className="text-purple-100 mt-1">AI-generated improvements based on call analysis</p>
+      {/* Latest Analysis Card */}
+      {latestAnalysis && (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-6">
+            <h3 className="text-2xl font-bold text-white">Latest Analysis</h3>
+            <p className="text-indigo-100 mt-1">
+              {latestAnalysis.calls_analyzed} calls analyzed
+              {latestAnalysis.calls_skipped > 0 && `, ${latestAnalysis.calls_skipped} skipped`}
+              {' · '}
+              {new Date(latestAnalysis.created_at).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+              })}
+            </p>
           </div>
-          <button
-            onClick={triggerPatternAnalysis}
-            disabled={analyzingPatterns}
-            className="px-6 py-3 bg-white text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition-all disabled:opacity-50 whitespace-nowrap"
-          >
-            {analyzingPatterns ? '⏳ Analyzing...' : '🔄 Run Analysis'}
-          </button>
+
+          <div className="p-8">
+            {/* Strengths */}
+            {latestAnalysis.strengths.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-lg font-bold text-gray-900 mb-3">Strengths</h4>
+                <div className="flex flex-wrap gap-2">
+                  {latestAnalysis.strengths.map((s, idx) => (
+                    <div key={idx} className="bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                      <span className="font-semibold text-green-800">{s.label}</span>
+                      {s.detail && (
+                        <span className="text-green-600 ml-2 text-sm">— {s.detail}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top Issues */}
+            {latestAnalysis.top_issues.length > 0 ? (
+              <div>
+                <h4 className="text-lg font-bold text-gray-900 mb-3">Issues Found</h4>
+                <div className="space-y-3">
+                  {latestAnalysis.top_issues.map((issue, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
+                      <button
+                        onClick={() => setExpandedIssueIdx(expandedIssueIdx === idx ? null : idx)}
+                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                            issue.severity === 'high' ? 'bg-red-100 text-red-700' :
+                            issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {issue.severity.toUpperCase()}
+                          </span>
+                          <span className="font-semibold text-gray-900">{issue.issue}</span>
+                        </div>
+                        <span className="text-gray-400 text-sm">
+                          {expandedIssueIdx === idx ? '▼' : '▶'} {issue.target_section}
+                        </span>
+                      </button>
+
+                      {expandedIssueIdx === idx && (
+                        <div className="px-6 pb-4 border-t border-gray-100">
+                          <p className="text-gray-700 mt-3 mb-3">{issue.fix_guidance}</p>
+                          {issue.evidence.length > 0 && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-500 mb-2">Evidence:</p>
+                              <ul className="space-y-1">
+                                {issue.evidence.map((e, eIdx) => (
+                                  <li key={eIdx} className="text-sm text-gray-600 pl-4 border-l-2 border-gray-200">
+                                    {e}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-lg font-semibold text-green-700">
+                  No significant issues found! Agent is performing well.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Suggestions with Diff View */}
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden mb-8">
+        <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-6">
+          <h3 className="text-2xl font-bold text-white">
+            Pending Suggestions ({pendingSuggestions.length})
+          </h3>
+          <p className="text-purple-100 mt-1">Review and apply AI-generated prompt improvements</p>
         </div>
 
         <div className="p-8">
           {pendingSuggestions.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">🤖</div>
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">✓</div>
               <h4 className="text-xl font-bold text-gray-900 mb-2">No pending suggestions</h4>
-              <p className="text-gray-600 mb-6">
-                Click "Run Analysis" to analyze recent calls and generate suggestions
+              <p className="text-gray-600">
+                {latestAnalysis
+                  ? 'All suggestions have been reviewed. Run a new analysis to check for improvements.'
+                  : 'Click "Run Analysis" to analyze recent calls and generate suggestions.'}
               </p>
             </div>
           ) : (
             <div className="space-y-6">
               {pendingSuggestions.map((suggestion) => (
                 <div key={suggestion.id} className="border-2 border-purple-200 rounded-xl p-6 bg-gradient-to-br from-purple-50/50 to-pink-50/50">
+                  {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <h4 className="text-xl font-bold text-gray-900 mb-2">{suggestion.title}</h4>
@@ -354,43 +448,36 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                     </div>
                   </div>
 
-                  <div className="mb-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">
-                      Based on {Array.isArray(suggestion.source_call_ids) ? suggestion.source_call_ids.length : 0} calls
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      {Array.isArray(suggestion.source_call_ids) && suggestion.source_call_ids.slice(0, 5).map((callId, idx) => (
-                        <span key={callId || idx} className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono text-gray-700">
-                          {typeof callId === 'string' ? callId.substring(0, 8) + '...' : 'invalid'}
-                        </span>
-                      ))}
-                      {Array.isArray(suggestion.source_call_ids) && suggestion.source_call_ids.length > 5 && (
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700">
-                          +{suggestion.source_call_ids.length - 5} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Proposed Changes */}
+                  {/* Diff View Toggle */}
                   <div className="mb-4">
                     <button
                       onClick={() => setExpandedSuggestionId(expandedSuggestionId === suggestion.id ? null : suggestion.id)}
-                      className="text-sm font-medium text-purple-600 hover:text-purple-700 mb-2"
+                      className="text-sm font-semibold text-purple-600 hover:text-purple-700"
                     >
-                      {expandedSuggestionId === suggestion.id ? '▼ Hide' : '▶ Show'} Proposed Changes ({suggestion.proposed_changes.changes.length})
+                      {expandedSuggestionId === suggestion.id ? '▼ Hide' : '▶ Show'} Changes ({suggestion.proposed_changes.changes.length})
                     </button>
-                    
+
                     {expandedSuggestionId === suggestion.id && (
-                      <div className="space-y-2 mt-2">
+                      <div className="space-y-4 mt-3">
                         {suggestion.proposed_changes.changes.map((change, idx) => (
-                          <div key={idx} className="bg-white p-4 rounded-lg border border-gray-200">
-                            <div className="text-xs font-bold text-purple-600 mb-2">
-                              {change.section.toUpperCase()}
+                          <div key={idx}>
+                            <div className="text-xs font-bold text-purple-600 mb-2 uppercase">
+                              {change.section}
                             </div>
-                            <div className="text-sm text-gray-700">
-                              {change.modification}
-                            </div>
+
+                            {/* V2: Diff view for new_content changes */}
+                            {change.current_content && change.new_content ? (
+                              <DiffView
+                                oldText={change.current_content}
+                                newText={change.new_content}
+                              />
+                            ) : change.modification ? (
+                              /* Legacy: Show modification text */
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <p className="text-xs text-green-600 font-medium mb-1">APPEND:</p>
+                                <p className="text-sm text-gray-700">{change.modification}</p>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -401,15 +488,17 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                   <div className="flex gap-3 pt-4 border-t border-gray-200">
                     <button
                       onClick={() => handleAcceptSuggestion(suggestion.id)}
-                      className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all"
+                      disabled={processingId === suggestion.id}
+                      className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all disabled:opacity-50"
                     >
-                      ✅ Accept & Apply
+                      {processingId === suggestion.id ? 'Applying...' : 'Accept & Apply'}
                     </button>
                     <button
                       onClick={() => handleRejectSuggestion(suggestion.id)}
-                      className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all"
+                      disabled={processingId === suggestion.id}
+                      className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
                     >
-                      ❌ Reject
+                      Reject
                     </button>
                   </div>
                 </div>
@@ -419,72 +508,49 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      {/* Recent Evaluations */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
-          <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span>📊</span> Recent Call Evaluations
-          </h3>
-          <p className="text-blue-100 mt-1">Quality scores from analyzed calls</p>
-        </div>
-
-        <div className="p-8">
-          {evaluations.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600">No evaluations yet. Calls will be analyzed automatically.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {evaluations.slice(0, 5).map((evaluation) => (
-                <div key={evaluation.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="font-mono text-sm text-gray-600">
-                      Call: {evaluation.call_id.substring(0, 16)}...
+      {/* Recently Accepted */}
+      {suggestions.filter(s => s.status === 'accepted').length > 0 && (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-8 py-6">
+            <h3 className="text-2xl font-bold text-white">
+              Recently Accepted ({suggestions.filter(s => s.status === 'accepted').length})
+            </h3>
+          </div>
+          <div className="p-8">
+            <div className="space-y-3">
+              {suggestions
+                .filter(s => s.status === 'accepted')
+                .slice(0, 5)
+                .map((s) => (
+                  <div key={s.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                    <div>
+                      <p className="font-semibold text-gray-900">{s.title}</p>
+                      <p className="text-sm text-gray-600">{s.description?.substring(0, 100)}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-bold ${
-                      evaluation.quality_score >= 0.8 ? 'bg-green-100 text-green-700' :
-                      evaluation.quality_score >= 0.6 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {(evaluation.quality_score * 100).toFixed(0)}% Quality
-                    </div>
+                    <span className="text-sm text-gray-500">
+                      {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
                   </div>
-                  
-                  <div className="grid grid-cols-5 gap-2 mb-3">
-                    {[
-                      { label: 'Quality', value: evaluation.quality_score },
-                      { label: 'Empathy', value: evaluation.empathy_score },
-                      { label: 'Professional', value: evaluation.professionalism_score },
-                      { label: 'Efficiency', value: evaluation.efficiency_score },
-                      { label: 'Goal', value: evaluation.goal_achievement_score },
-                    ].map((metric) => (
-                      <div key={metric.label} className="text-center">
-                        <div className="text-lg font-bold text-gray-900">
-                          {(metric.value * 100).toFixed(0)}%
-                        </div>
-                        <div className="text-xs text-gray-600">{metric.label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {evaluation.issues_detected && evaluation.issues_detected.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-sm font-medium text-gray-700 mb-2">
-                        ⚠️ {evaluation.issues_detected.length} issue(s) detected
-                      </p>
-                      {evaluation.issues_detected.slice(0, 2).map((issue, idx) => (
-                        <div key={idx} className="text-xs text-gray-600 ml-4">
-                          • {issue.type.replace(/_/g, ' ')} (turn {issue.turn})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Empty state */}
+      {!latestAnalysis && pendingSuggestions.length === 0 && (
+        <div className="text-center py-16">
+          <div className="text-6xl mb-6">🤖</div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Welcome to AI Sales Manager</h3>
+          <p className="text-gray-600 mb-6 max-w-lg mx-auto">
+            Click &ldquo;Run Analysis&rdquo; to analyze your recent calls. The AI will identify quality issues
+            and suggest prompt improvements with before/after comparisons.
+          </p>
+          <p className="text-sm text-gray-500">
+            Auto-triggers after every 10 completed calls.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

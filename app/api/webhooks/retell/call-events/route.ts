@@ -164,12 +164,11 @@ async function handleCallEnded(
   }
 
   // ------------------------------------------------------------------
-  // 3. AI Manager evaluation
+  // 3. AI Manager: Auto-trigger batch analysis every 10 calls
   // ------------------------------------------------------------------
-  // Run asynchronously to not block webhook response
-  evaluateCallAsync(updatedCall.id).catch((error) => {
-    console.error('[AI Manager] Evaluation failed:', error);
-    // Don't throw - webhook should succeed even if evaluation fails
+  checkAndTriggerBatchAnalysis(agentId).catch((error) => {
+    console.error('[AI Manager] Auto-trigger check failed:', error);
+    // Don't throw - webhook should succeed even if AI Manager fails
   });
 
   // ------------------------------------------------------------------
@@ -195,14 +194,15 @@ async function handleCallEnded(
 }
 
 /**
- * Helper function to run AI Manager evaluation without blocking webhook
+ * Check if enough calls have accumulated to trigger a batch analysis.
+ * Triggers after every 10 completed calls since the last analysis.
  */
-async function evaluateCallAsync(callId: string) {
+async function checkAndTriggerBatchAnalysis(agentId: string) {
   try {
-    const { evaluateCall } = await import('@/lib/services/ai-manager.service');
-    await evaluateCall(callId);
+    const { triggerBatchAnalysisIfNeeded } = await import('@/lib/services/ai-manager.service');
+    await triggerBatchAnalysisIfNeeded(agentId);
   } catch (error) {
-    console.error('[AI Manager] Async evaluation error:', error);
+    console.error('[AI Manager] Batch analysis trigger error:', error);
   }
 }
 

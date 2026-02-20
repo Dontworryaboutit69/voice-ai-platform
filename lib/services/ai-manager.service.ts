@@ -14,39 +14,45 @@ function getAnthropic(): Anthropic {
   return anthropic;
 }
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface Call {
   id: string;
   agent_id: string;
   duration_ms: number;
   transcript: string;
   transcript_object: Array<{ role: string; content: string }>;
+  created_at: string;
 }
 
-interface Evaluation {
-  quality_score: number;
-  empathy_score: number;
-  professionalism_score: number;
-  efficiency_score: number;
-  goal_achievement_score: number;
-  issues_detected: Array<{
-    type: string;
+interface BatchAnalysisResult {
+  id: string;
+  overall_quality_score: number;
+  strengths: Array<{ label: string; detail: string }>;
+  top_issues: Array<{
+    issue: string;
     severity: 'low' | 'medium' | 'high';
-    turn: number;
-    example: string;
+    target_section: string;
+    fix_guidance: string;
+    evidence: string[];
   }>;
-  opportunities: Array<{
-    type: string;
-    description: string;
-  }>;
-  summary_analysis: string;
+  calls_analyzed: number;
+  calls_skipped: number;
+  suggestion_id: string | null;
 }
+
+interface BatchAnalysisOptions {
+  callCount?: number;
+  daysSince?: number;
+}
+
+// ─── Utility: Filter non-interactive calls ───────────────────────────────────
 
 /**
- * Determines if call had real interaction (filters non-interactive calls)
+ * Determines if call had real interaction (filters non-interactive calls).
+ * Pure in-memory check — no Claude call needed.
  */
-export async function isCallInteractive(call: Call): Promise<boolean> {
-  // Filter criteria for non-interactive calls:
-
+export function isCallInteractive(call: Call): boolean {
   // 1. Too short (< 20 seconds)
   if (call.duration_ms < 20000) {
     console.log(`[AI Manager] Call ${call.id} too short: ${call.duration_ms}ms`);
@@ -71,413 +77,512 @@ export async function isCallInteractive(call: Call): Promise<boolean> {
 }
 
 /**
- * Evaluates a single call using Claude API
- * Returns null if call is non-interactive
+ * Calculates average of a score field across records
  */
-export async function evaluateCall(callId: string): Promise<Evaluation | null> {
-  const supabase = createServiceClient();
-
-  // Get call details
-  const { data: call, error: callError } = await supabase
-    .from('calls')
-    .select('*')
-    .eq('id', callId)
-    .single();
-
-  if (callError || !call) {
-    console.error('[AI Manager] Failed to get call:', callError);
-    throw new Error('Call not found');
-  }
-
-  // CRITICAL: Filter out non-interactive calls
-  const isInteractive = await isCallInteractive(call as Call);
-  if (!isInteractive) {
-    console.log(`[AI Manager] Skipping evaluation for non-interactive call ${callId}`);
-    return null;
-  }
-
-  // Get agent and current prompt
-  const { data: agent, error: agentError } = await supabase
-    .from('agents')
-    .select('id, current_prompt_id')
-    .eq('id', call.agent_id)
-    .single();
-
-  if (agentError || !agent) {
-    console.error('[AI Manager] Failed to get agent:', agentError);
-    throw new Error('Agent not found');
-  }
-
-  // Get current prompt
-  let currentPrompt = '';
-  if (agent.current_prompt_id) {
-    const { data: promptVersion } = await supabase
-      .from('prompt_versions')
-      .select('compiled_prompt')
-      .eq('id', agent.current_prompt_id)
-      .single();
-
-    currentPrompt = promptVersion?.compiled_prompt || '';
-  }
-
-  // Use Claude API to analyze call quality
-  console.log(`[AI Manager] Evaluating call ${callId} with Claude API...`);
-
-  const evaluationPrompt = buildEvaluationPrompt(call.transcript, currentPrompt);
-
-  let evaluation: Evaluation;
-
-  try {
-    const response = await getAnthropic().messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: evaluationPrompt
-      }]
-    });
-
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
-    }
-
-    evaluation = parseEvaluation(content.text);
-
-    // Store evaluation in database
-    const { error: insertError } = await supabase
-      .from('ai_call_evaluations')
-      .insert({
-        call_id: callId,
-        agent_id: call.agent_id,
-        quality_score: evaluation.quality_score,
-        empathy_score: evaluation.empathy_score,
-        professionalism_score: evaluation.professionalism_score,
-        efficiency_score: evaluation.efficiency_score,
-        goal_achievement_score: evaluation.goal_achievement_score,
-        issues_detected: evaluation.issues_detected,
-        opportunities: evaluation.opportunities,
-        summary_analysis: evaluation.summary_analysis,
-        analysis_model: 'claude-sonnet-4-5-20250929',
-      });
-
-    if (insertError) {
-      console.error('[AI Manager] Failed to store evaluation:', insertError);
-    } else {
-      console.log(`[AI Manager] Stored evaluation for call ${callId}`);
-    }
-
-    return evaluation;
-  } catch (error: any) {
-    console.error('[AI Manager] Claude API error:', error);
-    throw error;
-  }
-}
-
-/**
- * Builds the evaluation prompt for Claude API
- */
-function buildEvaluationPrompt(transcript: string, currentPrompt: string): string {
-  return `You are an expert AI sales call evaluator. You evaluate voice AI agent calls against a specific quality framework.
-
-Agent's Current Prompt:
-${currentPrompt || '[No prompt configured]'}
-
-Call Transcript:
-${transcript}
-
-EVALUATION FRAMEWORK — Score each dimension 0.0 to 1.0:
-
-1. **Quality** — Conversational naturalness and flow:
-   - One question per turn (never stacking multiple questions)
-   - Brief responses (1-2 sentences max, stops after question marks)
-   - Natural language (contractions, filler words like "Oh nice!", "Yeah, for sure", "Gotcha")
-   - Varied acknowledgments (not repeating "Perfect" or "Great" every turn)
-   - Conversational pacing (brief acknowledgment before question transitions)
-
-2. **Empathy** — Emotional intelligence without overdoing it:
-   - ONE empathetic statement max per conversation, naturally placed
-   - No dramatic empathy ("Oh I'm SO sorry to hear that!")
-   - Context-aware reactions specific to what the caller said
-   - Silence handling (not filling every pause when caller is thinking)
-
-3. **Professionalism** — Tone, personality depth, and character:
-   - Sounds like a real person with a distinct personality, not a template
-   - Industry-appropriate reactions and energy
-   - Never says "How may I assist you today?" or corporate filler
-   - Uses caller's name max 2 times total
-   - Doesn't reference "looking up" things AI can't access
-
-4. **Efficiency** — Sales process execution:
-   - Qualifies BEFORE collecting contact info (sales agent, not receptionist)
-   - Value bridge between qualification and contact collection (echoes what caller said, explains why they're a fit)
-   - Scheduling persistence: asks ONCE, if declined pivots to low-commitment alternative, never re-asks
-   - On pushback: rephrases differently, never repeats verbatim
-   - Prose recaps (never bullet points or lists in spoken dialogue)
-   - Phone numbers read back in 3-3-4 groups, emails accepted without spelling back
-
-5. **Goal Achievement** — Did the agent accomplish the call objective?
-   - Completed qualification questions with smart branching
-   - Collected contact info (if caller was qualified)
-   - Attempted booking/scheduling (if appropriate)
-   - Proper closing ("Is there anything else?" + goodbye)
-   - Handled edge cases gracefully (AI disclosure, off-topic, just browsing)
-
-ISSUE TYPES TO DETECT (provide specific examples with turn numbers):
-- "multiple_questions_in_turn" — Asked 2+ questions in one response (high severity if 3+)
-- "no_empathy" — Failed to acknowledge concern/urgency when appropriate
-- "excessive_empathy" — Multiple empathetic statements or dramatic reactions
-- "verbose_response" — Response over 2 sentences, or added filler after a question
-- "no_value_bridge" — Jumped to contact collection without summarizing fit
-- "contact_before_qualify" — Asked for name/phone/email before qualifying
-- "verbatim_re_ask" — Repeated same question word-for-word on pushback instead of rephrasing
-- "scheduling_pressure" — Asked to schedule more than once after being declined
-- "name_overuse" — Used caller's name more than 2 times
-- "robotic_language" — Used corporate/template language instead of natural speech
-- "missing_acknowledgment" — Jumped to next question without acknowledging caller's answer
-- "off_topic" — Tangent unrelated to the call objective
-- "missing_info_collection" — Failed to collect required information
-- "language_not_supported" — Customer spoke non-English; note the detected language in the example field
-- "interrogation_feel" — Rapid-fire questions without conversational pacing
-- "no_closing" — Call ended without proper recap and goodbye
-
-OPPORTUNITIES TO IDENTIFY:
-- "upsell_missed" — Caller mentioned interest in additional service
-- "qualification_gap" — Key qualifying question not asked
-- "followup_not_offered" — No next step offered when booking wasn't possible
-- "narrative_disconnect" — Agent collected info but didn't connect the dots (no story-building from caller's answers)
-
-Return ONLY valid JSON:
-{
-  "quality_score": 0.85,
-  "empathy_score": 0.60,
-  "professionalism_score": 0.90,
-  "efficiency_score": 0.75,
-  "goal_achievement_score": 0.80,
-  "issues_detected": [
-    {
-      "type": "no_value_bridge",
-      "severity": "high",
-      "turn": 8,
-      "example": "Agent asked for phone number immediately after qualification without summarizing why caller is a good fit"
-    }
-  ],
-  "opportunities": [
-    {
-      "type": "upsell_missed",
-      "description": "Caller mentioned interest in gutters but wasn't offered service"
-    }
-  ],
-  "summary_analysis": "Agent qualified well but jumped to contact collection without a value bridge. Natural tone was strong but used caller's name 4 times."
-}
-
-SCORING GUIDANCE:
-- 0.9-1.0: Exceptional — follows framework perfectly
-- 0.7-0.89: Good — minor issues, mostly follows framework
-- 0.5-0.69: Needs work — noticeable framework violations
-- Below 0.5: Poor — significant issues impacting call quality`;
-}
-
-/**
- * Parses Claude's evaluation response
- */
-function parseEvaluation(response: string): Evaluation {
-  try {
-    // Remove markdown code blocks if present
-    const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    return {
-      quality_score: parsed.quality_score || 0,
-      empathy_score: parsed.empathy_score || 0,
-      professionalism_score: parsed.professionalism_score || 0,
-      efficiency_score: parsed.efficiency_score || 0,
-      goal_achievement_score: parsed.goal_achievement_score || 0,
-      issues_detected: parsed.issues_detected || [],
-      opportunities: parsed.opportunities || [],
-      summary_analysis: parsed.summary_analysis || '',
-    };
-  } catch (error: any) {
-    console.error('[AI Manager] Failed to parse evaluation:', error.message);
-    console.error('[AI Manager] Response length:', response.length);
-    console.error('[AI Manager] Response preview:', response.substring(0, 500));
-    console.error('[AI Manager] Response end:', response.substring(response.length - 200));
-    const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    console.error('[AI Manager] Cleaned preview:', cleaned.substring(0, 500));
-    throw new Error(`Failed to parse evaluation response: ${error.message}`);
-  }
-}
-
-/**
- * Analyzes patterns across recent calls
- * Generates suggestions when pattern appears 3+ times
- */
-export async function analyzePatterns(
-  agentId: string,
-  daysSince: number = 7
-): Promise<void> {
-  const supabase = createServiceClient();
-
-  // 1. Get all calls from last N days with evaluations
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - daysSince);
-
-  const { data: evaluations, error: evalError } = await supabase
-    .from('ai_call_evaluations')
-    .select('*')
-    .eq('agent_id', agentId)
-    .gte('created_at', startDate.toISOString())
-    .order('created_at', { ascending: false });
-
-  if (evalError || !evaluations || evaluations.length === 0) {
-    console.log(`[AI Manager] No evaluations found for agent ${agentId}`);
-    return;
-  }
-
-  console.log(`[AI Manager] Analyzing ${evaluations.length} evaluations for patterns...`);
-
-  // 2. Detect patterns by grouping issues by type
-  const patterns = detectPatterns(evaluations);
-
-  console.log(`[AI Manager] Detected ${patterns.length} patterns`);
-
-  // 3. Generate improvement suggestions for significant patterns
-  // Generate suggestions when pattern appears in 1+ calls (was 3+, but agents
-  // with fewer test calls still need actionable feedback)
-  for (const pattern of patterns) {
-    const occurrenceCount = pattern.example_call_ids.length;
-
-    if (occurrenceCount >= 1 && pattern.severity !== 'low') {
-      console.log(`[AI Manager] Pattern "${pattern.pattern}" occurred ${occurrenceCount} times - generating suggestion`);
-
-      // Check if ANY suggestion (pending or accepted) already exists for this pattern type
-      // This prevents duplicate suggestions for the same underlying issue
-      const { data: existingSuggestions } = await supabase
-        .from('ai_improvement_suggestions')
-        .select('id, status, title')
-        .eq('agent_id', agentId)
-        .or(`status.eq.pending,status.eq.accepted`)
-        .order('created_at', { ascending: false });
-
-      // Check if any suggestion addresses this pattern (by checking if title/description contains pattern type)
-      const alreadyAddressed = existingSuggestions?.some(s =>
-        s.title.toLowerCase().includes(pattern.pattern.toLowerCase()) ||
-        s.title.toLowerCase().includes(pattern.pattern.replace(/_/g, ' ').toLowerCase())
-      );
-
-      if (!alreadyAddressed) {
-        // Import and call improvement suggestion service
-        try {
-          const { generateImprovementSuggestion } = await import('./improvement-suggestion.service');
-          await generateImprovementSuggestion(agentId, pattern.example_call_ids, { pattern });
-        } catch (suggestionError: any) {
-          const errorMsg = suggestionError?.message || '';
-          console.error(`[AI Manager] Failed to generate suggestion for pattern "${pattern.pattern}":`, errorMsg);
-          // Re-throw billing errors so the caller can handle them
-          if (errorMsg.includes('credit balance') || errorMsg.includes('401')) {
-            throw suggestionError;
-          }
-          // Continue with other patterns for non-billing errors
-        }
-      } else {
-        const existingStatus = existingSuggestions?.find(s =>
-          s.title.toLowerCase().includes(pattern.pattern.toLowerCase()) ||
-          s.title.toLowerCase().includes(pattern.pattern.replace(/_/g, ' ').toLowerCase())
-        )?.status;
-        console.log(`[AI Manager] Pattern "${pattern.pattern}" already has a ${existingStatus} suggestion - skipping`);
-      }
-    } else {
-      console.log(`[AI Manager] Pattern "${pattern.pattern}" only occurred ${occurrenceCount} times - skipping`);
-    }
-  }
-
-  // 4. Store pattern analysis
-  const { error: insertError } = await supabase
-    .from('ai_pattern_analysis')
-    .insert({
-      agent_id: agentId,
-      analysis_period_start: startDate.toISOString(),
-      analysis_period_end: new Date().toISOString(),
-      total_calls_analyzed: evaluations.length,
-      patterns: patterns,
-      avg_quality_score: calculateAverage(evaluations, 'quality_score'),
-      avg_call_duration_seconds: null, // Can add later if needed
-      recommendations: patterns.map(p => ({
-        pattern: p.pattern,
-        suggestion: `Address ${p.pattern} (occurred ${p.example_call_ids.length} times)`
-      }))
-    });
-
-  if (insertError) {
-    console.error('[AI Manager] Failed to store pattern analysis:', insertError);
-  }
-}
-
-/**
- * Detects patterns from evaluations
- */
-interface Pattern {
-  pattern: string;
-  occurrence_count: number;
-  frequency: number;
-  severity: 'low' | 'medium' | 'high';
-  example_call_ids: string[];
-}
-
-function detectPatterns(evaluations: any[]): Pattern[] {
-  const issueGroups = new Map<string, { call_ids: string[]; severity: string }>();
-
-  // Group issues by type
-  for (const evaluation of evaluations) {
-    const issues = evaluation.issues_detected || [];
-
-    for (const issue of issues) {
-      const key = issue.type;
-
-      if (!issueGroups.has(key)) {
-        issueGroups.set(key, { call_ids: [], severity: issue.severity });
-      }
-
-      const group = issueGroups.get(key)!;
-      if (!group.call_ids.includes(evaluation.call_id)) {
-        group.call_ids.push(evaluation.call_id);
-      }
-
-      // Use highest severity
-      if (issue.severity === 'high') {
-        group.severity = 'high';
-      } else if (issue.severity === 'medium' && group.severity !== 'high') {
-        group.severity = 'medium';
-      }
-    }
-  }
-
-  // Convert to pattern objects
-  const patterns: Pattern[] = [];
-
-  for (const [issueType, data] of issueGroups.entries()) {
-    patterns.push({
-      pattern: issueType,
-      occurrence_count: data.call_ids.length,
-      frequency: data.call_ids.length / evaluations.length,
-      severity: data.severity as 'low' | 'medium' | 'high',
-      example_call_ids: data.call_ids
-    });
-  }
-
-  // Sort by occurrence count (descending)
-  return patterns.sort((a, b) => b.occurrence_count - a.occurrence_count);
-}
-
-/**
- * Calculates average of a score field across evaluations
- */
-function calculateAverage(evaluations: any[], field: string): number {
-  const values = evaluations
+function calculateAverage(records: any[], field: string): number {
+  const values = records
     .map(e => e[field])
     .filter(v => typeof v === 'number');
 
   if (values.length === 0) return 0;
-
   return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+// ─── Core: Batch Analysis ────────────────────────────────────────────────────
+
+/**
+ * Run a batch analysis on recent calls for an agent.
+ * Makes 1-2 Claude API calls total:
+ *   1. Batch analysis (~$0.03-0.05): All transcripts + prompt → quality score, issues, strengths
+ *   2. Section rewrite (~$0.02-0.03): If issues found, rewrites the most impactful section
+ */
+export async function runBatchAnalysis(
+  agentId: string,
+  options: BatchAnalysisOptions = {}
+): Promise<BatchAnalysisResult> {
+  const { callCount = 10, daysSince = 7 } = options;
+  const supabase = createServiceClient();
+
+  console.log(`[AI Manager] Starting batch analysis for agent ${agentId} (last ${callCount} calls, ${daysSince} days)`);
+
+  // 1. Fetch recent calls with transcripts
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - daysSince);
+
+  const { data: calls, error: callsError } = await supabase
+    .from('calls')
+    .select('id, agent_id, duration_ms, transcript, transcript_object, created_at')
+    .eq('agent_id', agentId)
+    .eq('call_status', 'completed')
+    .not('transcript', 'is', null)
+    .gte('created_at', startDate.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(callCount);
+
+  if (callsError) {
+    console.error('[AI Manager] Failed to fetch calls:', callsError);
+    throw new Error('Failed to fetch calls for analysis');
+  }
+
+  if (!calls || calls.length === 0) {
+    throw new Error('No completed calls found in the specified time period');
+  }
+
+  // 2. Filter non-interactive calls in memory
+  const interactiveCalls = calls.filter(c => isCallInteractive(c as Call));
+  const skippedCount = calls.length - interactiveCalls.length;
+
+  console.log(`[AI Manager] ${calls.length} total calls, ${interactiveCalls.length} interactive, ${skippedCount} skipped`);
+
+  if (interactiveCalls.length < 1) {
+    throw new Error(`Only ${interactiveCalls.length} interactive calls found. Need at least 1 for analysis.`);
+  }
+
+  // 3. Fetch current prompt sections
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('id, current_prompt_id, retell_agent_id')
+    .eq('id', agentId)
+    .single();
+
+  if (!agent) {
+    throw new Error('Agent not found');
+  }
+
+  let promptSections: Record<string, string> = {};
+  let promptVersionId: string | null = null;
+
+  if (agent.current_prompt_id) {
+    const { data: promptVersion } = await supabase
+      .from('prompt_versions')
+      .select('id, prompt_role, prompt_personality, prompt_call_flow, prompt_info_recap, prompt_functions, prompt_knowledge, compiled_prompt')
+      .eq('id', agent.current_prompt_id)
+      .single();
+
+    if (promptVersion) {
+      promptVersionId = promptVersion.id;
+      promptSections = {
+        role: promptVersion.prompt_role || '',
+        personality: promptVersion.prompt_personality || '',
+        call_flow: promptVersion.prompt_call_flow || '',
+        info_recap: promptVersion.prompt_info_recap || '',
+        functions: promptVersion.prompt_functions || '',
+        knowledge_base: promptVersion.prompt_knowledge || '',
+      };
+    }
+  }
+
+  // 4. Fetch recently accepted suggestions for context
+  const { data: recentSuggestions } = await supabase
+    .from('ai_improvement_suggestions')
+    .select('title, description, proposed_changes, created_at')
+    .eq('agent_id', agentId)
+    .eq('status', 'accepted')
+    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  // 5. Build batch analysis prompt and call Claude
+  const batchPrompt = buildBatchAnalysisPrompt(interactiveCalls as Call[], promptSections, recentSuggestions || []);
+
+  console.log(`[AI Manager] Calling Claude for batch analysis (${interactiveCalls.length} calls)...`);
+
+  const response = await getAnthropic().messages.create({
+    model: 'claude-sonnet-4-5-20250929',
+    max_tokens: 4000,
+    messages: [{
+      role: 'user',
+      content: batchPrompt
+    }]
+  });
+
+  const content = response.content[0];
+  if (content.type !== 'text') {
+    throw new Error('Unexpected response type from Claude');
+  }
+
+  const analysis = parseBatchAnalysis(content.text);
+
+  console.log(`[AI Manager] Batch analysis complete: quality=${analysis.overall_quality_score}, issues=${analysis.top_issues.length}, strengths=${analysis.strengths.length}`);
+
+  // 6. Store in ai_batch_analyses
+  const { data: batchRecord, error: insertError } = await supabase
+    .from('ai_batch_analyses')
+    .insert({
+      agent_id: agentId,
+      call_ids: interactiveCalls.map(c => c.id),
+      calls_analyzed: interactiveCalls.length,
+      calls_skipped: skippedCount,
+      overall_quality_score: analysis.overall_quality_score,
+      strengths: analysis.strengths,
+      top_issues: analysis.top_issues,
+      calls_summary: analysis.calls_summary || null,
+      prompt_version_id: promptVersionId,
+      analysis_model: 'claude-sonnet-4-5-20250929',
+    })
+    .select('id')
+    .single();
+
+  if (insertError) {
+    console.error('[AI Manager] Failed to store batch analysis:', insertError);
+    throw new Error('Failed to store analysis results');
+  }
+
+  // 7. If top issue found, generate a section rewrite
+  let suggestionId: string | null = null;
+
+  if (analysis.top_issues.length > 0 && Object.keys(promptSections).some(k => promptSections[k])) {
+    const topIssue = analysis.top_issues[0];
+    console.log(`[AI Manager] Generating section rewrite for: "${topIssue.issue}" (target: ${topIssue.target_section})`);
+
+    try {
+      suggestionId = await generateSectionRewrite(
+        agentId,
+        topIssue,
+        promptSections,
+        interactiveCalls.map(c => c.id)
+      );
+
+      // Link suggestion to batch analysis
+      if (suggestionId) {
+        await supabase
+          .from('ai_batch_analyses')
+          .update({ suggestion_id: suggestionId })
+          .eq('id', batchRecord.id);
+      }
+    } catch (rewriteError: any) {
+      console.error('[AI Manager] Section rewrite failed (non-fatal):', rewriteError.message);
+      // Continue — analysis is still valuable without a suggestion
+    }
+  }
+
+  return {
+    id: batchRecord.id,
+    overall_quality_score: analysis.overall_quality_score,
+    strengths: analysis.strengths,
+    top_issues: analysis.top_issues,
+    calls_analyzed: interactiveCalls.length,
+    calls_skipped: skippedCount,
+    suggestion_id: suggestionId,
+  };
+}
+
+// ─── Core: Section Rewrite ───────────────────────────────────────────────────
+
+/**
+ * Generate a complete section rewrite for the top issue.
+ * Makes ONE Claude call that returns the full rewritten section.
+ */
+async function generateSectionRewrite(
+  agentId: string,
+  issue: {
+    issue: string;
+    severity: string;
+    target_section: string;
+    fix_guidance: string;
+    evidence: string[];
+  },
+  promptSections: Record<string, string>,
+  sourceCallIds: string[]
+): Promise<string | null> {
+  const sectionKey = issue.target_section;
+  const currentContent = promptSections[sectionKey];
+
+  if (!currentContent || currentContent.trim().length === 0) {
+    console.log(`[AI Manager] Target section "${sectionKey}" is empty, skipping rewrite`);
+    return null;
+  }
+
+  const rewritePrompt = buildSectionRewritePrompt(sectionKey, currentContent, issue, promptSections);
+
+  console.log(`[AI Manager] Calling Claude for section rewrite (section: ${sectionKey})...`);
+
+  const response = await getAnthropic().messages.create({
+    model: 'claude-sonnet-4-5-20250929',
+    max_tokens: 4000,
+    messages: [{
+      role: 'user',
+      content: rewritePrompt
+    }]
+  });
+
+  const content = response.content[0];
+  if (content.type !== 'text') {
+    throw new Error('Unexpected response type from Claude');
+  }
+
+  // Extract the rewritten section from the response
+  const newContent = parseRewrittenSection(content.text);
+
+  if (!newContent || newContent.trim().length < 20) {
+    console.error('[AI Manager] Rewrite produced empty or too-short content');
+    return null;
+  }
+
+  // Store as a suggestion with current_content + new_content format
+  const supabase = createServiceClient();
+
+  const { data: suggestion, error: insertError } = await supabase
+    .from('ai_improvement_suggestions')
+    .insert({
+      agent_id: agentId,
+      source_type: 'batch_analysis',
+      source_call_ids: sourceCallIds,
+      suggestion_type: 'prompt_change',
+      title: `Improve ${sectionKey.replace(/_/g, ' ')}: ${issue.issue}`,
+      description: issue.fix_guidance,
+      proposed_changes: {
+        sections: [sectionKey],
+        changes: [{
+          section: sectionKey,
+          current_content: currentContent,
+          new_content: newContent,
+        }]
+      },
+      confidence_score: issue.severity === 'high' ? 0.9 : issue.severity === 'medium' ? 0.75 : 0.6,
+      impact_estimate: issue.severity,
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  if (insertError) {
+    console.error('[AI Manager] Failed to store suggestion:', insertError);
+    throw new Error('Failed to store improvement suggestion');
+  }
+
+  console.log(`[AI Manager] Created suggestion ${suggestion.id} for section "${sectionKey}"`);
+  return suggestion.id;
+}
+
+// ─── Auto-trigger helper ─────────────────────────────────────────────────────
+
+/**
+ * Trigger batch analysis asynchronously (for use from webhook).
+ * Checks if enough calls have accumulated since the last analysis.
+ */
+export async function triggerBatchAnalysisIfNeeded(agentId: string): Promise<void> {
+  const supabase = createServiceClient();
+
+  // Get the last batch analysis date
+  const { data: lastAnalysis } = await supabase
+    .from('ai_batch_analyses')
+    .select('created_at')
+    .eq('agent_id', agentId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const lastAnalysisDate = lastAnalysis?.[0]?.created_at || new Date(0).toISOString();
+
+  // Count completed calls since last analysis
+  const { count } = await supabase
+    .from('calls')
+    .select('id', { count: 'exact', head: true })
+    .eq('agent_id', agentId)
+    .eq('call_status', 'completed')
+    .not('transcript', 'is', null)
+    .gt('created_at', lastAnalysisDate);
+
+  console.log(`[AI Manager] Auto-trigger check: ${count} calls since last analysis`);
+
+  if (count !== null && count >= 10) {
+    console.log(`[AI Manager] Auto-triggering batch analysis (${count} calls since last)`);
+    try {
+      await runBatchAnalysis(agentId, { callCount: 10, daysSince: 14 });
+      console.log('[AI Manager] Auto-triggered batch analysis completed');
+    } catch (error: any) {
+      console.error('[AI Manager] Auto-triggered batch analysis failed:', error.message);
+    }
+  }
+}
+
+// ─── Prompt Builders ─────────────────────────────────────────────────────────
+
+function buildBatchAnalysisPrompt(
+  calls: Call[],
+  promptSections: Record<string, string>,
+  recentSuggestions: any[]
+): string {
+  // Build transcripts section
+  const transcriptsText = calls.map((call, idx) => {
+    // Truncate very long transcripts to keep within token limits
+    const transcript = call.transcript.length > 3000
+      ? call.transcript.substring(0, 3000) + '\n[...transcript truncated]'
+      : call.transcript;
+    return `--- CALL ${idx + 1} (${call.id.substring(0, 8)}) ---\n${transcript}`;
+  }).join('\n\n');
+
+  // Build prompt sections text
+  const promptText = Object.entries(promptSections)
+    .filter(([, v]) => v && v.trim().length > 0)
+    .map(([k, v]) => `[${k.toUpperCase()}]\n${v}`)
+    .join('\n\n');
+
+  // Build recent fixes context
+  const recentFixesText = recentSuggestions.length > 0
+    ? recentSuggestions.map(s => `- ${s.title}: ${s.description}`).join('\n')
+    : 'None';
+
+  return `You are an expert AI sales call quality analyst. Analyze these ${calls.length} voice AI agent calls and assess overall performance.
+
+CURRENT AGENT PROMPT:
+${promptText || '[No prompt configured]'}
+
+RECENTLY ACCEPTED IMPROVEMENTS (avoid duplicating these):
+${recentFixesText}
+
+CALL TRANSCRIPTS:
+${transcriptsText}
+
+ANALYSIS FRAMEWORK — Evaluate across these dimensions:
+
+1. **Conversational Quality** — Natural flow, one question per turn, brief responses, varied acknowledgments
+2. **Empathy** — Appropriate emotional awareness without overdoing it
+3. **Professionalism** — Sounds like a real person, not a template
+4. **Sales Efficiency** — Qualifies before collecting info, value bridges, scheduling persistence
+5. **Goal Achievement** — Completed objectives, proper closing
+
+ISSUE TYPES TO LOOK FOR:
+- multiple_questions_per_turn, verbose_responses, robotic_language, missing_acknowledgment
+- no_value_bridge, contact_before_qualify, scheduling_pressure, name_overuse
+- interrogation_feel, no_closing, excessive_empathy, missing_info_collection
+- language_not_supported (customer spoke non-English)
+
+Return ONLY valid JSON with this structure:
+{
+  "overall_quality_score": 0.72,
+  "strengths": [
+    { "label": "Natural tone", "detail": "Agent uses contractions and natural language consistently" }
+  ],
+  "top_issues": [
+    {
+      "issue": "Multiple questions per turn",
+      "severity": "high",
+      "target_section": "call_flow",
+      "fix_guidance": "The agent frequently asks 2-3 questions in a single turn, overwhelming callers. The call_flow section should emphasize one question at a time with brief acknowledgments between questions.",
+      "evidence": ["Call 1 turn 5: asked name, email, and reason in one turn", "Call 3 turn 8: asked about budget and timeline together"]
+    }
+  ],
+  "calls_summary": {
+    "total_analyzed": ${calls.length},
+    "common_topics": ["dental inquiry", "pricing questions"],
+    "avg_user_turns": 8
+  }
+}
+
+RULES:
+- overall_quality_score: 0.0-1.0 based on the framework
+- strengths: 1-4 things the agent does well. Be specific.
+- top_issues: Rank by impact. Maximum 3 issues. Each MUST include:
+  - target_section: one of "role", "personality", "call_flow", "info_recap", "functions", "knowledge_base"
+  - fix_guidance: specific, actionable description of what the section rewrite should accomplish
+  - evidence: 2-3 specific examples from the transcripts with turn references
+- Do NOT flag issues that were already fixed in recent accepted improvements
+- If the agent is performing well (score > 0.85), it's OK to have 0 issues
+- Be honest and specific — vague issues like "could be better" are not helpful`;
+}
+
+function buildSectionRewritePrompt(
+  sectionKey: string,
+  currentContent: string,
+  issue: {
+    issue: string;
+    severity: string;
+    fix_guidance: string;
+    evidence: string[];
+  },
+  allSections: Record<string, string>
+): string {
+  // Provide context of other sections so the rewrite doesn't duplicate
+  const otherSectionsContext = Object.entries(allSections)
+    .filter(([k]) => k !== sectionKey)
+    .filter(([, v]) => v && v.trim().length > 0)
+    .map(([k, v]) => `[${k.toUpperCase()}] (${v.length} chars): ${v.substring(0, 200)}...`)
+    .join('\n');
+
+  return `You are a voice AI prompt engineer. Rewrite the "${sectionKey}" section of this agent's prompt to fix a specific issue.
+
+ISSUE TO FIX:
+- Problem: ${issue.issue}
+- Severity: ${issue.severity}
+- Guidance: ${issue.fix_guidance}
+- Evidence from calls: ${issue.evidence.join(' | ')}
+
+CURRENT "${sectionKey.toUpperCase()}" SECTION:
+${currentContent}
+
+OTHER SECTIONS (for context — do NOT duplicate content from these):
+${otherSectionsContext || 'None'}
+
+REWRITE RULES:
+1. Output the COMPLETE rewritten section — not just the changes
+2. INTEGRATE the fix naturally into the existing content
+3. REMOVE any redundant or contradictory instructions (e.g., if there are 3 lines saying "ask one question at a time", keep only 1 well-placed instruction)
+4. PRESERVE all existing SSML tags, formatting, and structural elements
+5. Keep the section approximately the same length (within 20%)
+6. Do NOT add meta-instructions like "IMPORTANT:", "CRITICAL:", "NOTE:" — write natural prompt instructions
+7. Maintain the tone and style of the original section
+8. If the section has clear sub-sections or numbered steps, maintain that structure
+
+Return ONLY the rewritten section content. Do NOT include any JSON, markdown code blocks, or explanatory text. Just the raw section content that will replace the current content.`;
+}
+
+// ─── Parsers ─────────────────────────────────────────────────────────────────
+
+interface ParsedBatchAnalysis {
+  overall_quality_score: number;
+  strengths: Array<{ label: string; detail: string }>;
+  top_issues: Array<{
+    issue: string;
+    severity: 'low' | 'medium' | 'high';
+    target_section: string;
+    fix_guidance: string;
+    evidence: string[];
+  }>;
+  calls_summary: any;
+}
+
+function parseBatchAnalysis(response: string): ParsedBatchAnalysis {
+  try {
+    const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    return {
+      overall_quality_score: Math.min(Math.max(parsed.overall_quality_score || 0, 0), 1),
+      strengths: (parsed.strengths || []).map((s: any) => ({
+        label: s.label || 'Unnamed',
+        detail: s.detail || '',
+      })),
+      top_issues: (parsed.top_issues || []).slice(0, 3).map((i: any) => ({
+        issue: i.issue || 'Unnamed issue',
+        severity: (['low', 'medium', 'high'].includes(i.severity) ? i.severity : 'medium') as 'low' | 'medium' | 'high',
+        target_section: i.target_section || 'call_flow',
+        fix_guidance: i.fix_guidance || '',
+        evidence: Array.isArray(i.evidence) ? i.evidence : [],
+      })),
+      calls_summary: parsed.calls_summary || null,
+    };
+  } catch (error: any) {
+    console.error('[AI Manager] Failed to parse batch analysis:', error.message);
+    console.error('[AI Manager] Response preview:', response.substring(0, 500));
+    throw new Error(`Failed to parse analysis response: ${error.message}`);
+  }
+}
+
+function parseRewrittenSection(response: string): string {
+  // The rewrite prompt asks for raw content, but Claude sometimes wraps in markdown
+  let cleaned = response.trim();
+
+  // Remove markdown code blocks if present
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+  }
+
+  // Remove any leading/trailing quotes
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  return cleaned;
 }
