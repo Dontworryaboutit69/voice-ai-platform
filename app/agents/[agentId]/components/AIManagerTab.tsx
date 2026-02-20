@@ -302,6 +302,15 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
         .filter(i => i?.target_section !== 'none').length
     : 0;
 
+  // Check if the latest analysis already has an accepted or pending suggestion
+  const analysisHasPendingSuggestion = latestAnalysis?.suggestion_id
+    ? suggestions.some(s => s.id === latestAnalysis.suggestion_id && s.status === 'pending')
+    : false;
+  const analysisHasAcceptedSuggestion = latestAnalysis?.suggestion_id
+    ? suggestions.some(s => s.id === latestAnalysis.suggestion_id && s.status === 'accepted')
+    : false;
+  const issuesAddressed = analysisHasAcceptedSuggestion;
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -434,9 +443,14 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
             {latestAnalysis.top_issues.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-lg font-bold text-gray-900">Issues Found</h4>
+                  <h4 className="text-lg font-bold text-gray-900">
+                    Issues Found
+                    {issuesAddressed && (
+                      <span className="ml-2 text-sm font-medium text-green-600">— Fix Applied ✓</span>
+                    )}
+                  </h4>
                   <div className="flex items-center gap-3">
-                    {latestAnalysis.top_issues.length > 1 && (
+                    {!issuesAddressed && !analysisHasPendingSuggestion && latestAnalysis.top_issues.length > 1 && (
                       <button
                         onClick={selectedIssueIdxs.size === latestAnalysis.top_issues.length ? deselectAllIssues : selectAllIssues}
                         className="text-sm text-purple-600 hover:text-purple-700 font-medium"
@@ -447,19 +461,50 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                   </div>
                 </div>
 
+                {issuesAddressed && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      These issues have been addressed. Run a new analysis after more calls to see if the fixes are working.
+                    </p>
+                  </div>
+                )}
+
+                {analysisHasPendingSuggestion && !issuesAddressed && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      A fix has been generated — review it in the Pending Suggestions section below.
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {latestAnalysis.top_issues.map((issue, idx) => {
                     const isPlatformIssue = issue.target_section === 'none';
                     const isSelected = selectedIssueIdxs.has(idx);
+                    const showCheckbox = !issuesAddressed && !analysisHasPendingSuggestion;
 
                     return (
                       <div key={idx} className={`border rounded-xl overflow-hidden transition-all ${
-                        isSelected ? 'border-purple-400 bg-purple-50/30 shadow-sm' : 'border-gray-200'
+                        issuesAddressed
+                          ? 'border-green-200 bg-green-50/30 opacity-75'
+                          : isSelected
+                            ? 'border-purple-400 bg-purple-50/30 shadow-sm'
+                            : 'border-gray-200'
                       }`}>
                         <div className="flex items-center">
-                          {/* Checkbox */}
+                          {/* Checkbox / Status indicator */}
                           <div className="pl-4 py-4 flex items-center">
-                            {isPlatformIssue ? (
+                            {issuesAddressed ? (
+                              <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            ) : analysisHasPendingSuggestion ? (
+                              <div className="w-5 h-5 rounded-full bg-blue-400 flex items-center justify-center" title="Fix pending review">
+                                <span className="text-xs text-white font-bold">⏳</span>
+                              </div>
+                            ) : isPlatformIssue ? (
                               <div className="w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 flex items-center justify-center cursor-not-allowed" title="Platform-level issue — adjust in Retell settings">
                                 <span className="text-xs text-gray-400">⚙</span>
                               </div>
@@ -534,24 +579,26 @@ export default function AIManagerTab({ agentId }: { agentId: string }) {
                   })}
                 </div>
 
-                {/* Generate Fix Button */}
-                <div className="mt-6 flex items-center gap-4">
-                  <button
-                    onClick={generateFixForSelectedIssues}
-                    disabled={selectedIssueIdxs.size === 0 || generatingFix || fixableSelectedCount === 0}
-                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generatingFix
-                      ? 'Generating Fix...'
-                      : fixableSelectedCount > 0
-                        ? `Generate Fix (${fixableSelectedCount} issue${fixableSelectedCount > 1 ? 's' : ''})`
-                        : 'Select Issues to Fix'
-                    }
-                  </button>
-                  {selectedIssueIdxs.size > 0 && fixableSelectedCount === 0 && (
-                    <p className="text-sm text-amber-600">Only platform-level issues selected</p>
-                  )}
-                </div>
+                {/* Generate Fix Button — only when issues are actionable */}
+                {!issuesAddressed && !analysisHasPendingSuggestion && (
+                  <div className="mt-6 flex items-center gap-4">
+                    <button
+                      onClick={generateFixForSelectedIssues}
+                      disabled={selectedIssueIdxs.size === 0 || generatingFix || fixableSelectedCount === 0}
+                      className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {generatingFix
+                        ? 'Generating Fix...'
+                        : fixableSelectedCount > 0
+                          ? `Generate Fix (${fixableSelectedCount} issue${fixableSelectedCount > 1 ? 's' : ''})`
+                          : 'Select Issues to Fix'
+                      }
+                    </button>
+                    {selectedIssueIdxs.size > 0 && fixableSelectedCount === 0 && (
+                      <p className="text-sm text-amber-600">Only platform-level issues selected</p>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-6">
