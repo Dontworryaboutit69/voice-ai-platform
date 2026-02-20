@@ -231,8 +231,11 @@ export async function runBatchAnalysis(
   // 7. If top issue found, generate a section rewrite
   let suggestionId: string | null = null;
 
-  if (analysis.top_issues.length > 0 && Object.keys(promptSections).some(k => promptSections[k])) {
-    const topIssue = analysis.top_issues[0];
+  // Find the first issue that targets an actual prompt section (skip "none" = platform-level issues)
+  const rewritableIssue = analysis.top_issues.find(i => i.target_section && i.target_section !== 'none');
+
+  if (rewritableIssue && Object.keys(promptSections).some(k => promptSections[k])) {
+    const topIssue = rewritableIssue;
     console.log(`[AI Manager] Generating section rewrite for: "${topIssue.issue}" (target: ${topIssue.target_section})`);
 
     try {
@@ -479,7 +482,8 @@ RULES:
   - evidence: 2-3 specific examples from the transcripts with turn references
 - Do NOT flag issues that were already fixed in recent accepted improvements
 - If the agent is performing well (score > 0.85), it's OK to have 0 issues
-- Be honest and specific — vague issues like "could be better" are not helpful`;
+- Be honest and specific — vague issues like "could be better" are not helpful
+- NEVER suggest prompt-level fixes for platform-level issues. These are controlled by Retell's speech settings, NOT the prompt: audio interruptions/overlaps, agent talking over the caller, latency/response delays, audio quality, background noise, turn-taking timing. If you observe these, note them in strengths/issues for awareness but set target_section to "none" so no rewrite is attempted.`;
 }
 
 function buildSectionRewritePrompt(
@@ -524,6 +528,7 @@ REWRITE RULES:
 7. Maintain the tone and style of the original section
 8. If the section has clear sub-sections or numbered steps, maintain that structure
 9. CRITICAL — THIS IS A VOICE AI PROMPT. Everything you write will be spoken aloud by a text-to-speech engine. NEVER include literal system tokens, technical commands, or placeholders like "NO_RESPONSE_NEEDED", "WAIT", "SILENCE", "[pause]", etc. Instead, describe the BEHAVIOR in natural language (e.g., "If the caller is still speaking, wait silently until they finish before responding.")
+10. MINIMAL CHANGES ONLY — Your job is to fix the specific issue described above, NOT to rewrite the whole section. Lines that are unrelated to the issue MUST be kept EXACTLY as they are — same wording, same punctuation, same order. Do NOT rephrase, reword, or "improve" lines that aren't broken. If a line says "Never re-ask for information already provided", do NOT change it to "Never re-ask for information the caller already provided" — leave it alone. The diff should show ONLY the lines that address the issue.
 
 Return ONLY the rewritten section content. Do NOT include any JSON, markdown code blocks, or explanatory text. Just the raw section content that will replace the current content.`;
 }
