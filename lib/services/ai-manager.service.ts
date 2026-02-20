@@ -302,7 +302,7 @@ async function generateSectionRewrite(
 
   const response = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 4000,
+    max_tokens: 6000,
     messages: [{
       role: 'user',
       content: rewritePrompt
@@ -498,42 +498,47 @@ function buildSectionRewritePrompt(
   },
   allSections: Record<string, string>
 ): string {
-  // Provide context of other sections so the rewrite doesn't duplicate
+  // Give full context of other sections so Claude understands the whole prompt
   const otherSectionsContext = Object.entries(allSections)
     .filter(([k]) => k !== sectionKey)
     .filter(([, v]) => v && v.trim().length > 0)
-    .map(([k, v]) => `[${k.toUpperCase()}] (${v.length} chars): ${v.substring(0, 200)}...`)
-    .join('\n');
+    .map(([k, v]) => `[${k.toUpperCase()}]\n${v}`)
+    .join('\n\n');
 
-  return `You are a voice AI prompt engineer. Rewrite the "${sectionKey}" section of this agent's prompt to fix a specific issue.
+  return `You are a senior voice AI prompt engineer reviewing a production phone agent. You've deployed 500+ agents and know exactly why prompts fail — the LLM takes shortcuts, ignores "mandatory" instructions, and skips sections it finds unnecessary. You fix prompts by RESTRUCTURING them so the correct behavior is the only possible path.
 
-ISSUE TO FIX:
+ISSUE FOUND IN LIVE CALLS:
 - Problem: ${issue.issue}
 - Severity: ${issue.severity}
-- Guidance: ${issue.fix_guidance}
-- Evidence from calls: ${issue.evidence.join(' | ')}
+- What went wrong: ${issue.fix_guidance}
+- Evidence: ${issue.evidence.join(' | ')}
 
-CURRENT "${sectionKey.toUpperCase()}" SECTION:
+FULL AGENT PROMPT FOR CONTEXT:
+${otherSectionsContext || 'No other sections'}
+
+SECTION TO REWRITE — "${sectionKey.toUpperCase()}":
 ${currentContent}
 
-OTHER SECTIONS (for context — do NOT duplicate content from these):
-${otherSectionsContext || 'None'}
+YOUR JOB:
+Rewrite the "${sectionKey}" section above so the issue is ACTUALLY FIXED on the next call. You are doing what a human prompt engineer would do — restructure, delete, rewrite, add — whatever it takes.
 
-REWRITE RULES:
-1. Output the COMPLETE rewritten section — not just the changes
-2. Your job is to ACTUALLY FIX the issue so the agent behaves differently on the next call. Do NOT just add a line saying "this is mandatory" or "you must do X" — those are weak fixes that the LLM will ignore. Instead, RESTRUCTURE the section so the correct behavior is the only possible path. For example:
-   - WEAK FIX: Adding "The recap is mandatory and cannot be skipped" (agent will still skip it)
-   - STRONG FIX: Restructuring the flow so the recap IS the closing — making it impossible to reach end_call without going through the recap first. Put the recap dialogue DIRECTLY before the goodbye, with no shortcut path.
-3. Think about WHY the agent is ignoring the current instructions. Usually it's because there's an easier/shorter path the LLM takes. Your fix should ELIMINATE the shortcut, not just add a warning label on it.
-4. REMOVE any redundant or contradictory instructions (e.g., if there are 3 lines saying "ask one question at a time", keep only 1 well-placed instruction)
-5. PRESERVE all existing SSML tags and formatting
-6. Do NOT add meta-instructions like "IMPORTANT:", "CRITICAL:", "NOTE:" — write the actual dialogue and flow
-7. Maintain the tone and style of the original section
-8. CRITICAL — THIS IS A VOICE AI PROMPT. Everything you write will be spoken aloud by a text-to-speech engine. NEVER include literal system tokens, technical commands, or placeholders like "NO_RESPONSE_NEEDED", "WAIT", "SILENCE", "[pause]", etc. Instead, describe the BEHAVIOR in natural language (e.g., "If the caller is still speaking, wait silently until they finish before responding.")
-9. Do NOT include instructions about audio-level behaviors controlled by Retell platform settings (interruption handling, response timing, audio overlap, turn-detection). Those are configured in Retell's speech settings, not the prompt.
-10. Lines that are UNRELATED to the issue must be kept EXACTLY as they are — same wording, same punctuation. Do NOT rephrase or "improve" lines that aren't broken. But lines that ARE related to the issue should be restructured as aggressively as needed to actually fix the problem.
+HOW TO THINK ABOUT FIXES:
+- The current prompt already tells the agent to do the right thing, but the agent is ignoring it. Adding another line saying "this is mandatory" will NOT work. The LLM already ignores the existing instruction — adding a stronger adjective won't change that.
+- Instead, think about WHY the LLM is skipping it. Usually there's a shorter/easier path it takes. Your job is to ELIMINATE the shortcut path.
+- Delete instruction paragraphs that the LLM ignores. Replace them with actual dialogue and flow that the LLM WILL follow.
+- LLMs follow dialogue examples much more reliably than instruction paragraphs. If you want the agent to do a recap, don't write "You must do a recap." Instead, write the actual recap dialogue as the next thing to say after booking, with no other path available.
+- Remove redundant or contradictory instructions. If 3 lines say the same thing, keep 1.
 
-Return ONLY the rewritten section content. Do NOT include any JSON, markdown code blocks, or explanatory text. Just the raw section content that will replace the current content.`;
+CONSTRAINTS:
+- Output the COMPLETE rewritten section, not a diff
+- Lines UNRELATED to the issue: keep them EXACTLY as-is (same words, same punctuation)
+- Lines RELATED to the issue: restructure as aggressively as needed
+- This is a VOICE AI prompt — everything is spoken aloud by TTS. Never include system tokens like "NO_RESPONSE_NEEDED", "[pause]", etc. Describe behaviors in natural language.
+- Never include instructions about audio-level behaviors (interruption handling, response timing, turn-detection) — those are Retell platform settings, not prompt-controllable.
+- Do NOT add meta-labels like "IMPORTANT:", "CRITICAL:", "NOTE:", "MANDATORY:" — just write the actual content.
+- Preserve all SSML tags (<break time='.2s'/> etc.)
+
+Return ONLY the rewritten section. No JSON, no markdown code blocks, no explanation.`;
 }
 
 // ─── Parsers ─────────────────────────────────────────────────────────────────
