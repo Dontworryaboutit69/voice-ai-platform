@@ -64,12 +64,19 @@ export async function POST(
     console.log('[ai-manager/suggestions POST] Request body:', body);
 
     const { suggestionId, action, userId } = body as {
-      suggestionId: string;
-      action: 'accept' | 'reject';
-      userId: string;
+      suggestionId?: string;
+      action: 'accept' | 'reject' | 'reject_all';
+      userId?: string;
     };
 
-    if (!suggestionId || !action || !userId) {
+    if (!action) {
+      return NextResponse.json(
+        { error: 'Missing required field: action' },
+        { status: 400 }
+      );
+    }
+
+    if (action !== 'reject_all' && (!suggestionId || !userId)) {
       console.error('[ai-manager/suggestions POST] Missing fields:', { suggestionId, action, userId });
       return NextResponse.json(
         { error: 'Missing required fields: suggestionId, action, userId' },
@@ -129,12 +136,14 @@ export async function POST(
       }
     } else if (action === 'reject') {
       // Just update status to rejected
+      // reviewed_by is a UUID FK — only set if userId looks like a valid UUID
+      const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       const { error: updateError } = await supabase
         .from('ai_improvement_suggestions')
         .update({
           status: 'rejected',
           reviewed_at: new Date().toISOString(),
-          reviewed_by: userId,
+          ...(isValidUuid ? { reviewed_by: userId } : {}),
         })
         .eq('id', suggestionId);
 
@@ -150,9 +159,34 @@ export async function POST(
         success: true,
         message: 'Suggestion rejected',
       });
+    } else if (action === 'reject_all') {
+      // Bulk reject all pending suggestions for this agent
+      const { data: rejected, error: updateError } = await supabase
+        .from('ai_improvement_suggestions')
+        .update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('agent_id', agentId)
+        .eq('status', 'pending')
+        .select('id');
+
+      if (updateError) {
+        console.error('[ai-manager/suggestions POST] Bulk reject error:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to reject suggestions' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Rejected ${rejected?.length || 0} pending suggestions`,
+        count: rejected?.length || 0,
+      });
     } else {
       return NextResponse.json(
-        { error: 'Invalid action. Must be "accept" or "reject"' },
+        { error: 'Invalid action. Must be "accept", "reject", or "reject_all"' },
         { status: 400 }
       );
     }
