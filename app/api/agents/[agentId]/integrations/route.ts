@@ -59,6 +59,9 @@ export async function POST(
       api_key,
       api_secret,
       webhook_url,
+      access_token,
+      refresh_token,
+      token_expires_at,
       config = {},
     } = body;
 
@@ -130,6 +133,17 @@ export async function POST(
         );
       }
       connectionData.webhook_url = webhook_url;
+    } else if (auth_type === 'oauth') {
+      // OAuth tokens from popup-based flows (Google Calendar, Calendly)
+      if (access_token) {
+        connectionData.access_token = access_token;
+      }
+      if (refresh_token) {
+        connectionData.refresh_token = refresh_token;
+      }
+      if (token_expires_at) {
+        connectionData.token_expires_at = token_expires_at;
+      }
     }
 
     // Check if integration already exists
@@ -204,7 +218,7 @@ export async function POST(
     }
 
     // Register calendar availability check tool with Retell if this is a calendar integration
-    if (['gohighlevel', 'google-calendar', 'calendly'].includes(integration_type)) {
+    if (['gohighlevel', 'google_calendar', 'calendly', 'cal_com'].includes(integration_type)) {
       try {
         const { data: agent } = await supabase
           .from('agents')

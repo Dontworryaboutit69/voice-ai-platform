@@ -158,7 +158,7 @@ export async function getAgentCustomTools(agentId: string, integrations: string[
 
   // Add calendar tools if agent has any calendar integration
   const hasCalendarIntegration = integrations.some(type =>
-    ['gohighlevel', 'google-calendar', 'calendly'].includes(type)
+    ['gohighlevel', 'google_calendar', 'calendly', 'cal_com'].includes(type)
   );
 
   if (hasCalendarIntegration) {

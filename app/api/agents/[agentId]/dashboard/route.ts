@@ -150,6 +150,41 @@ function buildCallVolume(calls: CallRow[], range: string) {
   return volume;
 }
 
+function buildDurationTrend(calls: CallRow[], range: string) {
+  // Group avg duration by date for the line chart
+  const durationsByDate: Record<string, number[]> = {};
+
+  for (const call of calls) {
+    if (call.duration_ms == null) continue;
+    const date = new Date(call.started_at).toISOString().split('T')[0];
+    if (!durationsByDate[date]) durationsByDate[date] = [];
+    durationsByDate[date].push(call.duration_ms);
+  }
+
+  const rangeMs = getRangeMs(range);
+  const now = new Date();
+  const startDate = rangeMs ? new Date(now.getTime() - rangeMs) : null;
+
+  const trend: Array<{ date: string; avgMs: number }> = [];
+  const current = startDate ? new Date(startDate) : (calls.length > 0 ? new Date(calls[calls.length - 1].started_at) : new Date());
+  current.setHours(0, 0, 0, 0);
+
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  while (current <= end) {
+    const dateStr = current.toISOString().split('T')[0];
+    const durations = durationsByDate[dateStr];
+    const avgMs = durations && durations.length > 0
+      ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length)
+      : 0;
+    trend.push({ date: dateStr, avgMs });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return trend;
+}
+
 // ─── Route handler ───────────────────────────────────────────────────────────
 
 export async function GET(
@@ -221,8 +256,9 @@ export async function GET(
       transferRate: null,
     };
 
-    // Call volume chart data
+    // Chart data
     const callVolume = buildCallVolume(currentCalls, range);
+    const durationTrend = buildDurationTrend(currentCalls, range);
 
     // Recent calls (top 5)
     const recentCalls = currentCalls.slice(0, 5).map(c => ({
@@ -241,6 +277,7 @@ export async function GET(
       stats,
       changes,
       callVolume,
+      durationTrend,
       recentCalls,
     });
   } catch (error: any) {

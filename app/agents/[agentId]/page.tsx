@@ -1649,15 +1649,25 @@ export default function AgentDashboard() {
                           </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedIntegration('gohighlevel');
-                          setShowIntegrationModal(true);
-                        }}
-                        className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 font-semibold shadow-lg shadow-purple-600/30 transition-all whitespace-nowrap"
-                      >
-                        Connect
-                      </button>
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            setSelectedIntegration('gohighlevel');
+                            setShowIntegrationModal(true);
+                          }}
+                          className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 font-semibold shadow-lg shadow-purple-600/30 transition-all whitespace-nowrap text-sm"
+                        >
+                          Connect Account
+                        </button>
+                        <a
+                          href="https://www.gohighlevel.com/?fp_ref=leadlabs-73"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-6 py-3 border-2 border-purple-300 text-purple-700 rounded-xl hover:bg-purple-50 font-semibold transition-all whitespace-nowrap text-sm text-center"
+                        >
+                          Free 14-Day Trial
+                        </a>
+                      </div>
                     </div>
                   </div>
 
@@ -3009,8 +3019,9 @@ export default function AgentDashboard() {
               console.log('Saving integration:', selectedIntegration, credentials, settings);
 
               // Prepare request body based on integration type
+              // Normalize hyphens to underscores (UI uses 'google-calendar', DB uses 'google_calendar')
               const requestBody: any = {
-                integration_type: selectedIntegration,
+                integration_type: selectedIntegration?.replace(/-/g, '_'),
                 config: { ...settings }
               };
 
@@ -3032,6 +3043,36 @@ export default function AgentDashboard() {
               }
               if (credentials.create_as) {
                 requestBody.config.create_as = credentials.create_as;
+              }
+
+              // OAuth token passthrough (from popup-based OAuth flows like Google, Calendly)
+              if (credentials.accessToken) {
+                requestBody.access_token = credentials.accessToken;
+              }
+              if (credentials.refreshToken) {
+                requestBody.refresh_token = credentials.refreshToken;
+              }
+              if (credentials.expiryDate) {
+                requestBody.token_expires_at = new Date(credentials.expiryDate).toISOString();
+              }
+              if (credentials.expiresIn && !credentials.expiryDate) {
+                requestBody.token_expires_at = new Date(Date.now() + credentials.expiresIn * 1000).toISOString();
+              }
+
+              // Cal.com event type ID
+              if (credentials.event_type_id) {
+                requestBody.config.event_type_id = credentials.event_type_id;
+              }
+              // Calendly event type URI and user URI
+              if (credentials.userUri) {
+                requestBody.config.user_uri = credentials.userUri;
+              }
+              if (credentials.schedulingUrl) {
+                requestBody.config.scheduling_url = credentials.schedulingUrl;
+              }
+              // Google Calendar ID from OAuth callback
+              if (credentials.calendarId) {
+                requestBody.config.calendar_id = credentials.calendarId;
               }
 
               console.log('Request body:', requestBody);

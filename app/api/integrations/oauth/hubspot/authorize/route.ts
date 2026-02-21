@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 
-  // Required scopes for HubSpot integration
+  // Required scopes for HubSpot integration (includes meetings for appointment booking)
   const scopes = [
     'crm.objects.contacts.write',
     'crm.objects.contacts.read',
@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
     'crm.objects.deals.read',
     'crm.schemas.contacts.read',
     'crm.schemas.deals.read',
+    'crm.objects.meetings.write',
+    'crm.objects.meetings.read',
   ].join(' ');
 
   // Store state in session for CSRF protection

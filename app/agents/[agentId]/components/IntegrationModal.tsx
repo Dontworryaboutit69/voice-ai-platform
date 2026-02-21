@@ -26,6 +26,15 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
   const [webhookError, setWebhookError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Affiliate referral links — opens in new tab for users who don't have an account yet
+  const affiliateLinks: Record<string, { url: string; cta: string; trial: string }> = {
+    'gohighlevel': {
+      url: 'https://www.gohighlevel.com/?fp_ref=leadlabs-73',
+      cta: 'Start Your 14-Day Free Trial',
+      trial: '14-day free trial'
+    },
+  };
+
   const integrationConfig: Record<string, any> = {
     'google-calendar': {
       name: 'Google Calendar',
@@ -34,9 +43,11 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
       authType: 'oauth',
       oauthProvider: 'google',
       settings: [
+        { key: 'business_hours_start', label: 'Business hours start (24h format, e.g. 9)', type: 'number', default: 9 },
+        { key: 'business_hours_end', label: 'Business hours end (24h format, e.g. 17)', type: 'number', default: 17 },
+        { key: 'slot_duration_minutes', label: 'Appointment slot duration (minutes)', type: 'number', default: 30 },
         { key: 'autoBook', label: 'Automatically book appointments', type: 'checkbox', default: true },
-        { key: 'sendConfirmation', label: 'Send email confirmations', type: 'checkbox', default: true },
-        { key: 'bufferTime', label: 'Buffer time between appointments (minutes)', type: 'number', default: 15 }
+        { key: 'sendConfirmation', label: 'Send email confirmations', type: 'checkbox', default: true }
       ]
     },
     'calendly': {
@@ -46,6 +57,7 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
       authType: 'oauth',
       oauthProvider: 'calendly',
       settings: [
+        { key: 'event_type_uri', label: 'Event Type URI', type: 'text', placeholder: 'e.g. /event_types/abc123 (from Calendly dashboard)' },
         { key: 'shareLink', label: 'Share booking link during calls', type: 'checkbox', default: true },
         { key: 'trackEvents', label: 'Track booked events', type: 'checkbox', default: true }
       ]
@@ -56,7 +68,8 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
       color: 'teal',
       authType: 'api_key',
       fields: [
-        { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'Enter your Cal.com API key', required: true }
+        { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'Enter your Cal.com API key', required: true },
+        { key: 'event_type_id', label: 'Event Type ID', type: 'text', placeholder: 'Numeric ID from Cal.com event type', required: true }
       ],
       settings: [
         { key: 'autoBook', label: 'Automatically book appointments', type: 'checkbox', default: true }
@@ -324,30 +337,51 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
               <h3 className="text-lg font-bold text-gray-900 mb-4">Connect Your Account</h3>
 
               {!testResult?.success ? (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-8 text-center mb-6">
-                  <div className={`w-20 h-20 mx-auto mb-4 bg-gradient-to-r ${colorClasses[config.color as keyof typeof colorClasses]} rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-lg`}>
-                    {config.icon}
+                <>
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-8 text-center mb-4">
+                    <div className={`w-20 h-20 mx-auto mb-4 bg-gradient-to-r ${colorClasses[config.color as keyof typeof colorClasses]} rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-lg`}>
+                      {config.icon}
+                    </div>
+                    <h4 className="text-xl font-bold text-gray-900 mb-2">Connect Your {config.name} Account</h4>
+                    <p className="text-gray-700 mb-6 leading-relaxed">
+                      Click the button below to securely connect your {config.name} account.
+                      <br /><br />
+                      You&apos;ll be redirected to {config.name} to authorize access, then brought back here.
+                    </p>
+                    <button
+                      onClick={() => {
+                        // Trigger OAuth flow
+                        const provider = integrationType.toLowerCase().replace('_', '').replace('-', '');
+                        const state = Math.random().toString(36).substring(7);
+                        const authUrl = `/api/integrations/oauth/${provider}/authorize?agent_id=${agentId}&state=${state}`;
+                        window.location.href = authUrl;
+                      }}
+                      className={`px-8 py-4 bg-gradient-to-r ${colorClasses[config.color as keyof typeof colorClasses]} text-white rounded-xl hover:shadow-xl font-bold text-lg transition-all inline-flex items-center gap-3`}
+                    >
+                      <span className="text-2xl">🔗</span>
+                      Connect {config.name}
+                    </button>
                   </div>
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">Connect Your {config.name} Account</h4>
-                  <p className="text-gray-700 mb-6 leading-relaxed">
-                    Click the button below to securely connect your {config.name} account.
-                    <br /><br />
-                    You'll be redirected to {config.name} to authorize access, then brought back here.
-                  </p>
-                  <button
-                    onClick={() => {
-                      // Trigger OAuth flow
-                      const provider = integrationType.toLowerCase().replace('_', '').replace('-', '');
-                      const state = Math.random().toString(36).substring(7);
-                      const authUrl = `/api/integrations/oauth/${provider}/authorize?agent_id=${agentId}&state=${state}`;
-                      window.location.href = authUrl;
-                    }}
-                    className={`px-8 py-4 bg-gradient-to-r ${colorClasses[config.color as keyof typeof colorClasses]} text-white rounded-xl hover:shadow-xl font-bold text-lg transition-all inline-flex items-center gap-3`}
-                  >
-                    <span className="text-2xl">🔗</span>
-                    Connect {config.name}
-                  </button>
-                </div>
+
+                  {/* Affiliate referral link — outside the blue card for visibility */}
+                  {affiliateLinks[integrationType] && (
+                    <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-6 text-center mb-6">
+                      <p className="text-sm font-semibold text-gray-700 mb-3">Don&apos;t have a {config.name} account?</p>
+                      <a
+                        href={affiliateLinks[integrationType].url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center justify-center gap-2 px-8 py-3 bg-gradient-to-r ${colorClasses[config.color as keyof typeof colorClasses]} text-white rounded-xl hover:shadow-xl font-bold text-base transition-all`}
+                      >
+                        {affiliateLinks[integrationType].cta} →
+                      </a>
+                      <p className="text-xs text-gray-500 mt-3">
+                        {affiliateLinks[integrationType].trial} — no credit card required.
+                        <br />After signing up, come back here and click &quot;Connect&quot; above.
+                      </p>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-6">
                   <div className="flex items-center gap-4">

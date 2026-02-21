@@ -1,6 +1,6 @@
 /**
  * OAuth Token Refresh Service
- * Handles automatic refresh of expired OAuth tokens for HubSpot and Salesforce
+ * Handles automatic refresh of expired OAuth tokens for all OAuth integrations
  */
 
 interface TokenRefreshResult {
@@ -177,6 +177,112 @@ export async function refreshGHLToken(refreshToken: string): Promise<TokenRefres
 }
 
 /**
+ * Refresh Google Calendar access token using refresh token
+ */
+export async function refreshGoogleCalendarToken(refreshToken: string): Promise<TokenRefreshResult> {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return {
+      success: false,
+      error: 'Google OAuth credentials not configured'
+    };
+  }
+
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('[GoogleCalendar] Token refresh failed:', error);
+      return {
+        success: false,
+        error: error.error_description || 'Token refresh failed'
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      access_token: data.access_token,
+      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString()
+    };
+  } catch (error: any) {
+    console.error('[GoogleCalendar] Token refresh error:', error);
+    return {
+      success: false,
+      error: error.message || 'Unexpected error during token refresh'
+    };
+  }
+}
+
+/**
+ * Refresh Calendly access token using refresh token
+ */
+export async function refreshCalendlyToken(refreshToken: string): Promise<TokenRefreshResult> {
+  const clientId = process.env.CALENDLY_CLIENT_ID;
+  const clientSecret = process.env.CALENDLY_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return {
+      success: false,
+      error: 'Calendly OAuth credentials not configured'
+    };
+  }
+
+  try {
+    const response = await fetch('https://auth.calendly.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('[Calendly] Token refresh failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Token refresh failed'
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      access_token: data.access_token,
+      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString()
+    };
+  } catch (error: any) {
+    console.error('[Calendly] Token refresh error:', error);
+    return {
+      success: false,
+      error: error.message || 'Unexpected error during token refresh'
+    };
+  }
+}
+
+/**
  * Update integration connection with new token
  */
 export async function updateIntegrationToken(
@@ -223,7 +329,7 @@ export async function updateIntegrationToken(
  */
 export async function ensureValidToken(
   integrationId: string,
-  integrationType: 'hubspot' | 'salesforce' | 'gohighlevel'
+  integrationType: 'hubspot' | 'salesforce' | 'gohighlevel' | 'google_calendar' | 'calendly'
 ): Promise<string | null> {
   // Use service client to avoid cookie dependency
   const { createServiceClient } = await import('@/lib/supabase/client');
@@ -260,6 +366,10 @@ export async function ensureValidToken(
       refreshResult = await refreshGHLToken(connection.refresh_token);
     } else if (integrationType === 'hubspot') {
       refreshResult = await refreshHubSpotToken(connection.refresh_token);
+    } else if (integrationType === 'google_calendar') {
+      refreshResult = await refreshGoogleCalendarToken(connection.refresh_token);
+    } else if (integrationType === 'calendly') {
+      refreshResult = await refreshCalendlyToken(connection.refresh_token);
     } else {
       refreshResult = await refreshSalesforceToken(connection.refresh_token);
     }

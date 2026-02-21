@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 
+// Calendar integration types that support booking
+const CALENDAR_TYPES = ['gohighlevel', 'google_calendar', 'cal_com', 'calendly'];
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -73,45 +76,38 @@ export async function POST(
 
     const supabase = createServiceClient();
 
-    // Get active calendar integration (GoHighLevel or Google Calendar)
-    const { data: integration, error: integrationError } = await supabase
+    // Get active calendar integration
+    const { data: integrations, error: integrationError } = await supabase
       .from('integration_connections')
       .select('*')
       .eq('agent_id', agentId)
       .eq('is_active', true)
-      .or('integration_type.eq.gohighlevel,integration_type.eq.google_calendar')
-      .single();
+      .in('integration_type', CALENDAR_TYPES);
 
-    if (integrationError || !integration) {
+    if (integrationError || !integrations || integrations.length === 0) {
       console.error('[book-appointment] No active calendar integration:', integrationError);
       return NextResponse.json(
-        {
-          success: false,
-          error: 'No calendar integration configured'
-        },
+        { success: false, error: 'No calendar integration configured' },
         { status: 200 }
       );
     }
 
+    const integration = integrations[0];
     console.log(`[book-appointment] Found ${integration.integration_type} integration`);
 
-    // Handle GoHighLevel booking
+    // ==================== GoHighLevel ====================
     if (integration.integration_type === 'gohighlevel') {
       const calendarId = integration.config?.calendar_id;
       const accessToken = integration.api_key;
 
       if (!calendarId || !accessToken) {
         return NextResponse.json(
-          {
-            success: false,
-            error: 'Calendar not properly configured'
-          },
+          { success: false, error: 'Calendar not properly configured' },
           { status: 200 }
         );
       }
 
       try {
-        // Import and use GoHighLevel integration
         const { GoHighLevelIntegration } = await import('@/lib/integrations/gohighlevel');
         const ghl = new GoHighLevelIntegration(integration);
 
@@ -120,10 +116,7 @@ export async function POST(
         if (!contactId) {
           if (!caller_name && !caller_phone && !caller_email) {
             return NextResponse.json(
-              {
-                success: false,
-                error: 'Either contactId or caller info (caller_name, caller_phone) is required'
-              },
+              { success: false, error: 'Either contactId or caller info (caller_name, caller_phone) is required' },
               { status: 200 }
             );
           }
@@ -138,10 +131,7 @@ export async function POST(
           if (!contactResult.success || !contactResult.data) {
             console.error('[book-appointment] Failed to create/find contact:', contactResult.error);
             return NextResponse.json(
-              {
-                success: false,
-                error: contactResult.error || 'Failed to create contact in CRM'
-              },
+              { success: false, error: contactResult.error || 'Failed to create contact in CRM' },
               { status: 200 }
             );
           }
@@ -157,21 +147,18 @@ export async function POST(
           timezone,
           title: title || 'Phone Consultation',
           description: notes || 'Booked via phone call',
-          durationMinutes: 30 // Default 30 min appointment
+          durationMinutes: 30
         });
 
         if (!result.success) {
           console.error('[book-appointment] GHL booking failed:', result.error);
           return NextResponse.json(
-            {
-              success: false,
-              error: result.error || 'Failed to book appointment'
-            },
+            { success: false, error: result.error || 'Failed to book appointment' },
             { status: 200 }
           );
         }
 
-        console.log(`[book-appointment] ✅ Appointment booked: ${result.data?.appointmentId}`);
+        console.log(`[book-appointment] Appointment booked: ${result.data?.appointmentId}`);
 
         return NextResponse.json({
           success: true,
@@ -181,46 +168,168 @@ export async function POST(
           time,
           timezone
         });
-
       } catch (error: any) {
-        console.error('[book-appointment] Error booking with GHL:', error);
+        console.error('[book-appointment] GHL error:', error);
         return NextResponse.json(
-          {
-            success: false,
-            error: 'Calendar service unavailable'
-          },
+          { success: false, error: 'Calendar service unavailable' },
           { status: 200 }
         );
       }
     }
 
-    // Handle Google Calendar
+    // ==================== Google Calendar ====================
     if (integration.integration_type === 'google_calendar') {
-      // TODO: Implement Google Calendar booking
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Google Calendar booking not yet implemented'
-        },
-        { status: 200 }
-      );
+      try {
+        // Refresh token before use
+        const { ensureValidToken } = await import('@/lib/services/oauth-token-refresh.service');
+        const validToken = await ensureValidToken(integration.id, 'google_calendar');
+        if (validToken) {
+          integration.access_token = validToken;
+        }
+
+        const { GoogleCalendarIntegration } = await import('@/lib/integrations/google-calendar');
+        const gcal = new GoogleCalendarIntegration(integration);
+
+        const result = await gcal.bookAppointment({
+          contactId: caller_email ? `gcal_${caller_email}` : undefined,
+          date,
+          time,
+          timezone,
+          title: title || `Appointment with ${caller_name || 'Caller'}`,
+          description: notes || 'Booked via phone call',
+          durationMinutes: 30
+        });
+
+        if (!result.success) {
+          console.error('[book-appointment] Google Calendar booking failed:', result.error);
+          return NextResponse.json(
+            { success: false, error: result.error || 'Failed to book appointment' },
+            { status: 200 }
+          );
+        }
+
+        console.log(`[book-appointment] Google Calendar event created: ${result.data?.appointmentId}`);
+
+        return NextResponse.json({
+          success: true,
+          appointmentId: result.data?.appointmentId,
+          date,
+          time,
+          timezone
+        });
+      } catch (error: any) {
+        console.error('[book-appointment] Google Calendar error:', error);
+        return NextResponse.json(
+          { success: false, error: 'Calendar service unavailable' },
+          { status: 200 }
+        );
+      }
+    }
+
+    // ==================== Cal.com ====================
+    if (integration.integration_type === 'cal_com') {
+      try {
+        const { CalComIntegration } = await import('@/lib/integrations/cal-com');
+        const calcom = new CalComIntegration(integration);
+
+        const email = caller_email || `${(caller_name || 'caller').replace(/\s+/g, '.').toLowerCase()}@placeholder.com`;
+
+        const result = await calcom.bookAppointment({
+          contactId: `calcom_${email}`,
+          date,
+          time,
+          timezone,
+          title: title || `Appointment with ${caller_name || 'Caller'}`,
+          description: notes || 'Booked via phone call',
+          durationMinutes: 30
+        });
+
+        if (!result.success) {
+          console.error('[book-appointment] Cal.com booking failed:', result.error);
+          return NextResponse.json(
+            { success: false, error: result.error || 'Failed to book appointment' },
+            { status: 200 }
+          );
+        }
+
+        console.log(`[book-appointment] Cal.com booking created: ${result.data?.appointmentId}`);
+
+        return NextResponse.json({
+          success: true,
+          appointmentId: result.data?.appointmentId,
+          date,
+          time,
+          timezone
+        });
+      } catch (error: any) {
+        console.error('[book-appointment] Cal.com error:', error);
+        return NextResponse.json(
+          { success: false, error: 'Calendar service unavailable' },
+          { status: 200 }
+        );
+      }
+    }
+
+    // ==================== Calendly ====================
+    if (integration.integration_type === 'calendly') {
+      try {
+        // Refresh token before use
+        const { ensureValidToken } = await import('@/lib/services/oauth-token-refresh.service');
+        const validToken = await ensureValidToken(integration.id, 'calendly');
+        if (validToken) {
+          integration.access_token = validToken;
+        }
+
+        const { CalendlyIntegration } = await import('@/lib/integrations/calendly');
+        const calendly = new CalendlyIntegration(integration);
+
+        const email = caller_email || `${(caller_name || 'caller').replace(/\s+/g, '.').toLowerCase()}@placeholder.com`;
+
+        const result = await calendly.bookAppointment({
+          contactId: `calendly_${email}`,
+          date,
+          time,
+          timezone,
+          title: title || `Appointment with ${caller_name || 'Caller'}`,
+          description: notes || 'Booked via phone call',
+          durationMinutes: 30
+        });
+
+        if (!result.success) {
+          console.error('[book-appointment] Calendly booking failed:', result.error);
+          return NextResponse.json(
+            { success: false, error: result.error || 'Failed to book appointment' },
+            { status: 200 }
+          );
+        }
+
+        console.log(`[book-appointment] Calendly booking created: ${result.data?.appointmentId}`);
+
+        return NextResponse.json({
+          success: true,
+          appointmentId: result.data?.appointmentId,
+          date,
+          time,
+          timezone
+        });
+      } catch (error: any) {
+        console.error('[book-appointment] Calendly error:', error);
+        return NextResponse.json(
+          { success: false, error: 'Calendar service unavailable' },
+          { status: 200 }
+        );
+      }
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Unknown calendar type'
-      },
+      { success: false, error: 'Unknown calendar type' },
       { status: 200 }
     );
 
   } catch (error: any) {
     console.error('[book-appointment] Unexpected error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal server error'
-      },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
