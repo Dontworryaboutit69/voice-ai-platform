@@ -25,14 +25,29 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 
-  // Required scopes for HubSpot integration
+  // Full scopes for HubSpot integration (CRM, calendar/meetings, workflows, automation)
   const scopes = [
+    // Contacts & Companies
     'crm.objects.contacts.write',
     'crm.objects.contacts.read',
+    'crm.objects.companies.write',
+    'crm.objects.companies.read',
+    // Deals / Pipeline
     'crm.objects.deals.write',
     'crm.objects.deals.read',
+    // Schemas
     'crm.schemas.contacts.read',
     'crm.schemas.deals.read',
+    'crm.schemas.companies.read',
+    // Meetings / Scheduler
+    'scheduler.meetings.meeting-link.read',
+    // Owners (assign contacts to reps)
+    'crm.objects.owners.read',
+    // Lists
+    'crm.lists.read',
+    'crm.lists.write',
+    // Timeline / Notes
+    'timeline',
   ].join(' ');
 
   // Store state in session for CSRF protection
