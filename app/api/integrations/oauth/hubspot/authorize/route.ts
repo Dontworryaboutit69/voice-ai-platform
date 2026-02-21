@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   // Check environment variables
   const clientId = process.env.HUBSPOT_CLIENT_ID;
-  const redirectUri = process.env.HUBSPOT_REDIRECT_URI;
+  const redirectUri = (process.env.HUBSPOT_REDIRECT_URI || '').trim();
 
   if (!clientId || !redirectUri) {
     return NextResponse.json({
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 
-  console.log('[HubSpot OAuth] State stored successfully:', { state, agent_id: agentId });
+  console.log('[HubSpot OAuth] State stored successfully:', { state, agent_id: agentId, redirect_uri: redirectUri });
 
   // Build HubSpot authorization URL
   const authUrl = new URL('https://app.hubspot.com/oauth/authorize');

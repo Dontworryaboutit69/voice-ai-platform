@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   // Exchange code for access token
   const clientId = process.env.HUBSPOT_CLIENT_ID;
   const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
-  const redirectUri = process.env.HUBSPOT_REDIRECT_URI;
+  const redirectUri = (process.env.HUBSPOT_REDIRECT_URI || '').trim();
 
   if (!clientId || !clientSecret || !redirectUri) {
     return NextResponse.redirect(
