@@ -1,10 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import Retell from 'retell-sdk';
 
-const retellClient = new Retell({
-  apiKey: process.env.RETELL_API_KEY!,
-});
+const RETELL_API_KEY = process.env.RETELL_API_KEY || '';
 
 interface DataField {
   id: string;
@@ -20,16 +18,17 @@ interface DataField {
  * Get current data collection configuration
  */
 export async function GET(
-  request: Request,
-  { params }: { params: { agentId: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
+    const { agentId } = await params;
     const supabase = createServiceClient();
 
     const { data, error } = await supabase
       .from('agent_data_collection_configs')
       .select('*')
-      .eq('agent_id', params.agentId)
+      .eq('agent_id', agentId)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -48,13 +47,16 @@ export async function GET(
 
 /**
  * POST /api/agents/[agentId]/data-collection
- * Save data collection configuration and update Retell agent
+ * Save data collection configuration and update Retell agent with:
+ * 1. post_call_analysis_data (native Retell extraction)
+ * 2. Prompt instructions for natural data collection during calls
  */
 export async function POST(
-  request: Request,
-  { params }: { params: { agentId: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
+    const { agentId } = await params;
     const body = await request.json();
     const { fields } = body as { fields: DataField[] };
 
@@ -63,8 +65,8 @@ export async function POST(
     // Get agent details
     const { data: agent, error: agentError } = await supabase
       .from('agents')
-      .select('retell_agent_id, business_name')
-      .eq('id', params.agentId)
+      .select('retell_agent_id, retell_llm_id, business_name')
+      .eq('id', agentId)
       .single();
 
     if (agentError) throw agentError;
@@ -82,7 +84,7 @@ export async function POST(
       );
     }
 
-    // Prepare Retell analysis config
+    // Prepare Retell analysis config for our DB
     const retellConfig = {
       extract_fields: enabledFields.map(f => ({
         name: f.id,
@@ -92,15 +94,12 @@ export async function POST(
       })),
     };
 
-    // Generate updated prompt instructions for data collection
-    const dataCollectionInstructions = generateDataCollectionPrompt(enabledFields);
-
     // Save to database
     const { error: upsertError } = await supabase
       .from('agent_data_collection_configs')
       .upsert(
         {
-          agent_id: params.agentId,
+          agent_id: agentId,
           fields: fields,
           retell_analysis_config: retellConfig,
         },
@@ -111,34 +110,60 @@ export async function POST(
 
     if (upsertError) throw upsertError;
 
-    // Update Retell agent with new prompt instructions
-    if (agent.retell_agent_id) {
+    // Sync to Retell
+    if (agent.retell_agent_id && RETELL_API_KEY) {
+      const retell = new Retell({ apiKey: RETELL_API_KEY });
+
       try {
-        // Get current agent from Retell
-        const currentAgent = await retellClient.agent.retrieve(agent.retell_agent_id);
+        // 1. Set native post_call_analysis_data on the Retell agent
+        //    This uses Retell's built-in extraction after each call
+        const postCallAnalysisData = enabledFields.map(f => {
+          // Map our field types to Retell's analysis types
+          if (f.type === 'phone' || f.type === 'email') {
+            return {
+              type: 'string' as const,
+              name: f.id,
+              description: `${f.label} (${f.type} format)${f.required ? ' - Required' : ''}`,
+            };
+          }
+          return {
+            type: 'string' as const,
+            name: f.id,
+            description: `${f.label}${f.required ? ' - Required' : ''}`,
+          };
+        });
 
-        // Append data collection instructions to the agent's general prompt
-        const updatedPrompt = updatePromptWithDataCollection(
-          (currentAgent as unknown as Record<string, unknown>).general_prompt as string || '',
-          dataCollectionInstructions
-        );
+        await retell.agent.update(agent.retell_agent_id, {
+          post_call_analysis_data: postCallAnalysisData,
+        } as Parameters<typeof retell.agent.update>[1]);
 
-        // Update Retell agent
-        await retellClient.agent.update(agent.retell_agent_id, {
-          general_prompt: updatedPrompt,
-        } as Parameters<typeof retellClient.agent.update>[1]);
-
-        console.log(`[data-collection] Updated Retell agent ${agent.retell_agent_id} with data collection instructions`);
+        console.log(`[data-collection] Updated Retell agent ${agent.retell_agent_id} with ${postCallAnalysisData.length} post_call_analysis_data fields`);
       } catch (retellError) {
-        console.error('[data-collection] Failed to update Retell agent:', retellError);
-        // Don't fail the request if Retell update fails
-        // The config is still saved in our database
+        console.error('[data-collection] Failed to update Retell agent post_call_analysis_data:', retellError);
+      }
+
+      // 2. Update prompt on the LLM so the agent naturally collects the data during calls
+      if (agent.retell_llm_id) {
+        try {
+          const currentLlm = await retell.llm.retrieve(agent.retell_llm_id);
+          const currentPrompt = (currentLlm as any).general_prompt || '';
+          const dataCollectionInstructions = generateDataCollectionPrompt(enabledFields);
+          const updatedPrompt = updatePromptWithDataCollection(currentPrompt, dataCollectionInstructions);
+
+          await retell.llm.update(agent.retell_llm_id, {
+            general_prompt: updatedPrompt,
+          });
+
+          console.log(`[data-collection] Updated Retell LLM ${agent.retell_llm_id} prompt with data collection instructions`);
+        } catch (llmError) {
+          console.error('[data-collection] Failed to update Retell LLM prompt:', llmError);
+        }
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Data collection settings saved',
+      message: 'Data collection settings saved and synced to Retell',
       enabledFieldsCount: enabledFields.length,
     });
   } catch (error) {
@@ -204,16 +229,13 @@ function updatePromptWithDataCollection(
     const nextSectionMatch = restOfPrompt.match(/\n##\s+[A-Z]/);
 
     if (nextSectionMatch && nextSectionMatch.index) {
-      // Remove old section, keep everything after
       basePrompt =
         existingPrompt.substring(0, startIndex) +
         restOfPrompt.substring(nextSectionMatch.index);
     } else {
-      // Remove to end
       basePrompt = existingPrompt.substring(0, startIndex).trim();
     }
   }
 
-  // Add new instructions at the end
   return basePrompt + newInstructions;
 }

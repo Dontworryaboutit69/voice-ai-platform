@@ -734,8 +734,17 @@ CRITICAL REQUIREMENTS:
           ? `https://${process.env.VERCEL_URL}`
           : PRODUCTION_URL;
 
+        // Build post_call_analysis_data if data collection fields were configured
+        const postCallAnalysisData = dataCollectionFields && Array.isArray(dataCollectionFields) && dataCollectionFields.length > 0
+          ? dataCollectionFields.map((fieldId: string) => ({
+              type: 'string' as const,
+              name: fieldId,
+              description: fieldId.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+            }))
+          : undefined;
+
         console.log('[generate] Creating Retell Agent...');
-        const retellAgent = await retell.agent.create({
+        const createParams: any = {
           agent_name: businessName,
           voice_id: '11labs-Cimo',
           language: 'en-US',
@@ -744,7 +753,14 @@ CRITICAL REQUIREMENTS:
             type: 'retell-llm',
             llm_id: retellLlmId,
           },
-        });
+        };
+
+        if (postCallAnalysisData) {
+          createParams.post_call_analysis_data = postCallAnalysisData;
+          console.log(`[generate] Including ${postCallAnalysisData.length} post_call_analysis_data fields`);
+        }
+
+        const retellAgent = await retell.agent.create(createParams);
         retellAgentId = retellAgent.agent_id;
         console.log(`[generate] ✅ Created Retell Agent: ${retellAgentId}`);
 

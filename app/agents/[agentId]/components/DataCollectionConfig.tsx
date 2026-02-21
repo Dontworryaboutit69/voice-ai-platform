@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, Plus, X, Save } from 'lucide-react';
-import { createBrowserClient as createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 interface DataField {
@@ -39,38 +38,32 @@ export default function DataCollectionConfig({ agentId }: DataCollectionConfigPr
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState<'text' | 'phone' | 'email' | 'select'>('text');
 
-  const supabase = createClient();
-
   // Load existing configuration
   useEffect(() => {
     loadConfig();
   }, [agentId]);
 
   async function loadConfig() {
-    const { data, error } = await supabase
-      .from('agent_data_collection_configs')
-      .select('fields')
-      .eq('agent_id', agentId)
-      .single();
+    try {
+      const response = await fetch(`/api/agents/${agentId}/data-collection`);
+      const result = await response.json();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows
+      if (result.data && result.data.fields) {
+        const loadedFields = result.data.fields as DataField[];
+
+        // Separate standard and custom fields
+        const standard = STANDARD_FIELDS.map(sf => {
+          const loaded = loadedFields.find(f => f.id === sf.id);
+          return loaded ? { ...sf, enabled: loaded.enabled, required: loaded.required } : sf;
+        });
+
+        const custom = loadedFields.filter(f => f.isCustom);
+
+        setFields(standard);
+        setCustomFields(custom);
+      }
+    } catch (error) {
       console.error('Error loading config:', error);
-      return;
-    }
-
-    if (data && data.fields) {
-      const loadedFields = data.fields as DataField[];
-
-      // Separate standard and custom fields
-      const standard = STANDARD_FIELDS.map(sf => {
-        const loaded = loadedFields.find(f => f.id === sf.id);
-        return loaded ? { ...sf, enabled: loaded.enabled, required: loaded.required } : sf;
-      });
-
-      const custom = loadedFields.filter(f => f.isCustom);
-
-      setFields(standard);
-      setCustomFields(custom);
     }
   }
 
@@ -141,36 +134,23 @@ export default function DataCollectionConfig({ agentId }: DataCollectionConfigPr
         return;
       }
 
-      // Prepare Retell analysis config
-      const retellConfig = {
-        extract_fields: enabledFields.map(f => ({
-          name: f.id,
-          label: f.label,
-          type: f.type,
-          required: f.required,
-        })),
-      };
+      // Call the server API route which saves to DB AND syncs to Retell
+      const response = await fetch(`/api/agents/${agentId}/data-collection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: allFields }),
+      });
 
-      // Save to database
-      const { error: upsertError } = await supabase
-        .from('agent_data_collection_configs')
-        .upsert({
-          agent_id: agentId,
-          fields: allFields,
-          retell_analysis_config: retellConfig,
-        }, {
-          onConflict: 'agent_id',
-        });
+      const result = await response.json();
 
-      if (upsertError) throw upsertError;
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save settings');
+      }
 
-      // TODO: Update Retell agent configuration via API
-      // This will be done in the next step
-
-      toast.success('Data collection settings saved!');
-    } catch (error) {
+      toast.success('Data collection settings saved & synced to Retell!');
+    } catch (error: any) {
       console.error('Error saving config:', error);
-      toast.error('Failed to save settings');
+      toast.error(error.message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }

@@ -48,7 +48,7 @@ export async function PUT(
     if (transfer_person_name !== undefined) updateData.transfer_person_name = transfer_person_name;
     if (transfer_triggers !== undefined) updateData.transfer_triggers = transfer_triggers;
 
-    // Update agent settings
+    // Update agent settings in DB
     const { data, error } = await supabase
       .from('agents')
       .update(updateData)
@@ -64,37 +64,32 @@ export async function PUT(
       );
     }
 
-    // Determine if transfer settings changed
-    const transferChanged = transfer_enabled !== undefined ||
-      transfer_number !== undefined ||
-      transfer_person_name !== undefined;
-
-    // Update Retell agent + LLM if connected
+    // Sync ALL changes to Retell
     if (data.retell_agent_id && RETELL_API_KEY) {
+      const retell = new Retell({ apiKey: RETELL_API_KEY });
+      const appUrl = getAppUrl();
+
+      // 1. Update agent-level settings (name, voice, webhook)
       try {
-        const appUrl = getAppUrl();
+        const agentUpdate: any = {
+          webhook_url: `${appUrl}/api/webhooks/retell/call-events`,
+        };
+        if (data.business_name) agentUpdate.agent_name = data.business_name;
+        if (data.voice_id) agentUpdate.voice_id = data.voice_id;
 
-        // Update agent-level settings (name, voice, webhook)
-        await fetch(`https://api.retellai.com/update-agent`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${RETELL_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            agent_id: data.retell_agent_id,
-            agent_name: data.business_name,
-            voice_id: data.voice_id,
-            webhook_url: `${appUrl}/api/webhooks/retell/call-events`
-          })
-        });
+        await retell.agent.update(data.retell_agent_id, agentUpdate);
+        console.log(`[settings] Updated Retell agent: name=${data.business_name}, voice=${data.voice_id}`);
+      } catch (agentError) {
+        console.error('[settings] Failed to update Retell agent:', agentError);
+      }
 
-        // If transfer settings changed, update the LLM's general_tools
-        if (transferChanged && data.retell_llm_id) {
-          console.log('[settings] Transfer settings changed — syncing to Retell LLM...');
-          const retell = new Retell({ apiKey: RETELL_API_KEY });
+      // 2. Always rebuild LLM tools when any settings change
+      //    This ensures tools stay in sync regardless of which setting changed
+      if (data.retell_llm_id) {
+        try {
+          console.log('[settings] Rebuilding Retell LLM tools...');
 
-          // Build the new tools array
+          // Build the tools array from scratch
           const tools: any[] = [
             {
               type: 'end_call',
@@ -106,9 +101,7 @@ export async function PUT(
           // Add transfer tool if enabled
           if (data.transfer_enabled && data.transfer_number) {
             tools.push(getTransferCallToolConfig(data.transfer_number, data.transfer_person_name));
-            console.log(`[settings] ✅ Adding transfer_call tool → ${data.transfer_number}`);
-          } else {
-            console.log('[settings] Transfer disabled — removing transfer_call tool from LLM');
+            console.log(`[settings] + transfer_call -> ${data.transfer_number}`);
           }
 
           // Check for GHL integration to add calendar tools
@@ -157,20 +150,48 @@ export async function PUT(
                 required: ['caller_name', 'caller_phone', 'date', 'time']
               }
             });
+            console.log('[settings] + check_calendar_availability + book_appointment');
           }
 
-          try {
-            await retell.llm.update(data.retell_llm_id, {
-              general_tools: tools
-            });
-            console.log(`[settings] ✅ Updated LLM ${data.retell_llm_id} with ${tools.length} tools`);
-          } catch (llmError) {
-            console.error('[settings] Failed to update LLM tools:', llmError);
+          // Build LLM update payload
+          const llmUpdate: any = {
+            general_tools: tools,
+          };
+
+          // If any transfer setting changed, update the prompt with transfer instructions
+          const transferChanged = transfer_enabled !== undefined ||
+            transfer_number !== undefined ||
+            transfer_person_name !== undefined ||
+            transfer_triggers !== undefined;
+
+          if (transferChanged) {
+            const currentLlm = await retell.llm.retrieve(data.retell_llm_id);
+            const currentPrompt = (currentLlm as any).general_prompt || '';
+
+            // If transfers are enabled, add/update transfer rules in prompt
+            // If disabled, remove the section
+            const transferInstructions = data.transfer_enabled
+              ? generateTransferTriggerPrompt(
+                  data.transfer_triggers || [],
+                  data.transfer_person_name
+                )
+              : ''; // Empty string removes the section
+
+            const updatedPrompt = updatePromptSection(
+              currentPrompt,
+              '## Call Transfer Rules',
+              transferInstructions
+            );
+
+            llmUpdate.general_prompt = updatedPrompt;
+            console.log(`[settings] ${data.transfer_enabled ? 'Updated' : 'Removed'} transfer rules in prompt`);
           }
+
+          await retell.llm.update(data.retell_llm_id, llmUpdate);
+          console.log(`[settings] Updated LLM ${data.retell_llm_id} with ${tools.length} tools`);
+        } catch (llmError) {
+          console.error('[settings] Failed to update LLM tools:', llmError);
         }
-      } catch (retellError) {
-        console.error('Error updating Retell agent:', retellError);
-        // Don't fail the whole request if Retell update fails
       }
     }
 
@@ -186,4 +207,64 @@ export async function PUT(
       { status: 500 }
     );
   }
+}
+
+/**
+ * Generate transfer trigger instructions for the agent prompt.
+ * These tell the AI when it should use the transfer_call tool.
+ */
+function generateTransferTriggerPrompt(
+  triggers: string[],
+  transferPersonName?: string
+): string {
+  if (!triggers || triggers.length === 0) return '';
+
+  const personName = transferPersonName || 'a team member';
+  let instructions = `\n\n## Call Transfer Rules\n\n`;
+  instructions += `You have the ability to transfer calls to ${personName}. Transfer the call in these situations:\n\n`;
+
+  const triggerMap: Record<string, string> = {
+    customer_requests: `- **Customer requests a real person**: If the caller explicitly asks to speak with a human, real person, or manager, transfer immediately.`,
+    existing_customer: `- **Existing customer calling back**: If the caller identifies themselves as an existing customer following up on a previous matter, offer to transfer them.`,
+    cant_answer: `- **Cannot answer the question**: If you are unable to answer the caller's question or resolve their issue, offer to transfer to ${personName}.`,
+    emergency: `- **Urgent or emergency situation**: If the caller describes an emergency or urgent situation, transfer immediately without delay.`,
+  };
+
+  triggers.forEach(trigger => {
+    if (triggerMap[trigger]) {
+      instructions += triggerMap[trigger] + '\n';
+    }
+  });
+
+  instructions += `\nWhen transferring, briefly let the caller know you're connecting them with ${personName}.\n`;
+
+  return instructions;
+}
+
+/**
+ * Update a specific section in the prompt.
+ * Removes the old section (from marker to next ## heading) and replaces with new content.
+ */
+function updatePromptSection(
+  existingPrompt: string,
+  sectionMarker: string,
+  newContent: string
+): string {
+  const startIndex = existingPrompt.indexOf(sectionMarker);
+
+  let basePrompt = existingPrompt;
+  if (startIndex !== -1) {
+    const restOfPrompt = existingPrompt.substring(startIndex);
+    const nextSectionMatch = restOfPrompt.match(/\n##\s+[A-Z]/);
+
+    if (nextSectionMatch && nextSectionMatch.index) {
+      basePrompt =
+        existingPrompt.substring(0, startIndex) +
+        restOfPrompt.substring(nextSectionMatch.index);
+    } else {
+      basePrompt = existingPrompt.substring(0, startIndex).trim();
+    }
+  }
+
+  return basePrompt + newContent;
 }
