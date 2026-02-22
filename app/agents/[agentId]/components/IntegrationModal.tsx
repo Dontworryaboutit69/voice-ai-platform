@@ -351,7 +351,7 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
                     <button
                       onClick={() => {
                         // Trigger OAuth flow
-                        const provider = integrationType.toLowerCase().replace('_', '').replace('-', '');
+                        const provider = config.oauthProvider || integrationType.toLowerCase().replace('_', '').replace('-', '');
                         const state = Math.random().toString(36).substring(7);
                         const authUrl = `/api/integrations/oauth/${provider}/authorize?agent_id=${agentId}&state=${state}`;
                         window.location.href = authUrl;
