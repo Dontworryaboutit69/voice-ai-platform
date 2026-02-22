@@ -185,7 +185,7 @@ export default function IntegrationModal({ agentId, integrationType, onClose, on
       const top = window.screen.height / 2 - height / 2;
 
       const oauthWindow = window.open(
-        `/api/integrations/oauth/${config.oauthProvider}/authorize`,
+        `/api/integrations/oauth/${config.oauthProvider}/authorize?agent_id=${agentId}&state=${Math.random().toString(36).substring(7)}`,
         'OAuth',
         `width=${width},height=${height},left=${left},top=${top}`
       );
