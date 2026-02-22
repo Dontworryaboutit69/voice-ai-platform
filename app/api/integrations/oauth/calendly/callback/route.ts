@@ -8,21 +8,43 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
     const error = searchParams.get('error');
 
     if (error) {
-      return new NextResponse(
-        `<html><body><script>window.opener.postMessage({type: 'oauth_error', error: '${error}'}, '*'); window.close();</script></body></html>`,
-        { headers: { 'Content-Type': 'text/html' } }
+      return NextResponse.redirect(
+        new URL(`/agents?error=oauth_failed&provider=calendly&reason=${error}`, request.url)
       );
     }
 
-    if (!code) {
-      return new NextResponse(
-        `<html><body><script>window.opener.postMessage({type: 'oauth_error', error: 'No authorization code received'}, '*'); window.close();</script></body></html>`,
-        { headers: { 'Content-Type': 'text/html' } }
+    if (!code || !state) {
+      return NextResponse.redirect(
+        new URL('/agents?error=oauth_failed&provider=calendly&reason=missing_params', request.url)
       );
     }
+
+    // Verify state
+    const { createClient } = await import('@supabase/supabase-js');
+    const serviceSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: oauthState, error: stateError } = await serviceSupabase
+      .from('oauth_states')
+      .select('*')
+      .eq('state', state)
+      .eq('provider', 'calendly')
+      .single();
+
+    if (stateError || !oauthState) {
+      console.error('[Calendly OAuth] State verification failed:', stateError);
+      return NextResponse.redirect(
+        new URL('/agents?error=oauth_failed&provider=calendly&reason=invalid_state', request.url)
+      );
+    }
+
+    const { agent_id } = oauthState;
 
     // Exchange code for access token
     const tokenResponse = await fetch('https://auth.calendly.com/oauth/token', {
@@ -40,52 +62,79 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      throw new Error('Failed to exchange code for token');
+      const errorData = await tokenResponse.json().catch(() => ({}));
+      console.error('[Calendly OAuth] Token exchange failed:', errorData);
+      return NextResponse.redirect(
+        new URL('/agents?error=oauth_failed&provider=calendly&reason=token_exchange_failed', request.url)
+      );
     }
 
     const tokens = await tokenResponse.json();
+    const { access_token, refresh_token, expires_in } = tokens;
 
-    // Get user info
-    const userResponse = await fetch('https://api.calendly.com/users/me', {
-      headers: {
-        'Authorization': `Bearer ${tokens.access_token}`
-      }
+    console.log('[Calendly OAuth] Token exchange successful:', {
+      has_access_token: !!access_token,
+      has_refresh_token: !!refresh_token,
     });
 
+    // Get user info from Calendly
+    const userResponse = await fetch('https://api.calendly.com/users/me', {
+      headers: { 'Authorization': `Bearer ${access_token}` }
+    });
     const userData = await userResponse.json();
 
-    const credentials = {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      userUri: userData.resource.uri,
-      schedulingUrl: userData.resource.scheduling_url
-    };
+    // Get agent's organization_id
+    const { data: agent, error: agentError } = await serviceSupabase
+      .from('agents')
+      .select('organization_id')
+      .eq('id', agent_id)
+      .single();
 
-    // Send success message to parent window
-    return new NextResponse(
-      `<html>
-        <body>
-          <script>
-            window.opener.postMessage({
-              type: 'oauth_success',
-              credentials: ${JSON.stringify(credentials)}
-            }, '*');
-            window.close();
-          </script>
-          <div style="font-family: system-ui; text-align: center; padding: 40px;">
-            <h2 style="color: #22c55e;">✓ Connected Successfully!</h2>
-            <p style="color: #64748b;">This window will close automatically...</p>
-          </div>
-        </body>
-      </html>`,
-      { headers: { 'Content-Type': 'text/html' } }
+    if (agentError || !agent) {
+      console.error('[Calendly OAuth] Failed to get agent:', agentError);
+      return NextResponse.redirect(
+        new URL('/agents?error=oauth_failed&provider=calendly&reason=agent_not_found', request.url)
+      );
+    }
+
+    // Save to integration_connections
+    const { error: insertError } = await serviceSupabase
+      .from('integration_connections')
+      .insert({
+        agent_id,
+        organization_id: agent.organization_id,
+        integration_type: 'calendly',
+        auth_type: 'oauth',
+        access_token,
+        refresh_token,
+        token_expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+        is_active: true,
+        config: {
+          user_uri: userData?.resource?.uri || null,
+          scheduling_url: userData?.resource?.scheduling_url || null,
+        },
+      });
+
+    if (insertError) {
+      console.error('[Calendly OAuth] Failed to save connection:', insertError);
+      return NextResponse.redirect(
+        new URL('/agents?error=oauth_failed&provider=calendly&reason=save_failed', request.url)
+      );
+    }
+
+    console.log('[Calendly OAuth] Connection saved successfully for agent:', agent_id);
+
+    // Clean up state
+    await serviceSupabase.from('oauth_states').delete().eq('state', state);
+
+    // Redirect back to agent page
+    return NextResponse.redirect(
+      new URL(`/agents/${agent_id}?integration_connected=calendly`, request.url)
     );
   } catch (error: any) {
-    console.error('Error in Calendly OAuth callback:', error);
-    return new NextResponse(
-      `<html><body><script>window.opener.postMessage({type: 'oauth_error', error: '${error.message}'}, '*'); window.close();</script></body></html>`,
-      { headers: { 'Content-Type': 'text/html' } }
+    console.error('[Calendly OAuth] Unexpected error:', error);
+    return NextResponse.redirect(
+      new URL('/agents?error=oauth_failed&provider=calendly&reason=unexpected_error', request.url)
     );
   }
 }
